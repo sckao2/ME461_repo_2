@@ -63,13 +63,13 @@ float adc2out = 0.0;
 int16_t servo_increment = 10;
 
 //for checkoff 2
-uint16_t secondsa = 11;
-uint16_t minutesa = 11;
-uint16_t hoursa = 11;
-uint16_t daysa = 11;
-uint16_t monthsa = 11;
-uint16_t datea = 11;
-uint16_t yearsa = 11;
+uint16_t secondsa = 0;
+uint16_t minutesa = 0;
+uint16_t hoursa = 0;
+uint16_t daysa = 3;
+uint16_t monthsa = 31;
+uint16_t datea = 10;
+uint16_t yearsa = 23;
 
 /* Functions to check if I2C is ready to transfer or receive.
  * Here we utilize EPWM7 to keep track of time. If I2C is
@@ -437,7 +437,7 @@ void main(void)
             while(I2C_OK != 0) {
                 num_WriteDAN777_Errors++;
                 if (num_WriteDAN777_Errors > 2) {
-                    serial_printf(&SerialA," Error: %d\r\n",I2C_OK);
+                    serial_printf(&SerialA,"WriteDAN777RCServo Error: %d\r\n",I2C_OK);
                     I2C_OK = 0;
                 } else {
                     I2CB_Init();
@@ -716,30 +716,30 @@ int16_t WriteBQ32000(uint16_t seconds, uint16_t minutes, uint16_t hours, uint16_
 
     seconds_1 = seconds % 10;
     seconds_10 = seconds / 10;
-    secondWrite = (seconds_10 << 4)|(0XF&seconds_1);
+    secondWrite = ((seconds_10 << 4)&0X70)|(0XF&seconds_1);
 
     minutes_1 = minutes % 10;
     minutes_10 = minutes / 10;
-    minuteWrite = (minutes_10 << 4)|(0XF&minutes_1);
+    minuteWrite = ((minutes_10 << 4)&0X70)|(0XF&minutes_1);
 
     hours_1 = hours % 10;
     hours_10 = hours / 10;
-    hourWrite = (hours_10 << 4)|(0XF&hours_1);
+    hourWrite = ((hours_10 << 4)&0X30)|(0XF&hours_1);
 
     day = days;
-    dayWrite = 0XF&day;
+    dayWrite = day&0X7;
 
     date_1 = date % 10;
     date_10 = date / 10;
-    dateWrite = (date_10 << 4)|(0XF&date_1);
+    dateWrite = ((date_10 << 4)&0X30)|(0XF&date_1);
 
     months_1 = months % 10;
     months_10 = months / 10;
-    monthWrite = (months_10 << 4)|(0XF&months_1);
+    monthWrite = ((months_10 << 4)&0X10)|(0XF&months_1);
 
     years_1 = years % 10;
     years_10 = years / 10;
-    yearWrite = (years_10 << 4)|(0XF&years_1);
+    yearWrite = ((years_10 << 4)&0XF0)|(0XF&years_1);
 
     int16_t I2C_Xready = 0;
     // Allow time for I2C to finish up previous commands.
