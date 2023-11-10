@@ -34,8 +34,73 @@ __interrupt void cpu_timer2_isr(void);
 __interrupt void SWI_isr(void);
 __interrupt void SPIB_isr(void);//AMBSCK predefine spib interrupt service routing
 void setupSpib(void); //SCK predefine setupSPIB
+void init_eQEPs(void);
+float readEncLeft(void);
+float readEncRight(void);
+void setEPWM2A(float uLeft);
+void setEPWM2B(float uRight);
+void PIcontroller(float Kp, float Ki, float Vref, float V, float I_1, float e_1);
+//lab 6 variable definitions AMBSCK
+float leftAngle = 0.0;
+float rightAngle = 0.0;//store wheel angles AMBSCK;
+float leftDist = 0.0;
+float rightDist = 0.0;
+float leftDist_1 = 0.0;
+float rightDist_1 = 0.0;//store wheel distances and previous distances AMBSCK
+float leftAngle_1 = 0.0;
+float rightAngle_1 = 0.0;
+float leftOmega = 0.0;
+float rightOmega = 0.0;
+float leftVel = 0.0;
+float rightVel = 0.0;
+float uLeft = 5.0;
+float uRight = 5.0;
+float poseX = 0.0;
+float poseY = 0.0;
+float velX = 0.0;
+float velY = 0.0;
+float velX_1 = 0.0;
+float velY_1 = 0.0;
+float Rwh = 0.19460;
+float Wr = 0.56759;
+float omegaAvg = 0.0;
+float phi = 0.0;
+
+float I_L = 0.0;
+float e_L = 0.0;
+float I_R = 0.0;
+float e_R = 0.0;
+float I_1_L = 0.0;
+float e_1_L = 0.0;
+float I_1_R = 0.0;
+float e_1_R = 0.0;//AMBSCK memory variables for integrator
+float Kp = 3.0;
+float Ki = 5.0;
+float Vref = 0.0;
+float turn = 0.0;
+float Kpturn = 3.0;
+float eturn = 0.0;
+
+//variable definition for wireless communication
+float printLV3 = 0;
+float printLV4 = 0;
+float printLV5 = 0;
+float printLV6 = 0;
+float printLV7 = 0;
+float printLV8 = 0;
+float x = 0;
+float y = 0;
+float bearing = 0;
+extern uint16_t NewLVData;
+extern float fromLVvalues[LVNUM_TOFROM_FLOATS];
+extern LVSendFloats_t DataToLabView;
+extern char LVsenddata[LVNUM_TOFROM_FLOATS*4+2];
+extern uint16_t newLinuxCommands;
+extern float LinuxCommands[CMDNUM_FROM_FLOATS];
+
 // Count variables
 uint32_t numTimer0calls = 0;
+uint32_t numTimer1calls = 0;
 uint32_t numSWIcalls = 0;
 extern uint32_t numRXA;
 uint16_t UARTPrint = 0;
@@ -271,16 +336,37 @@ void main(void)
     // Configure CPU-Timer 0, 1, and 2 to interrupt every given period:
     // 200MHz CPU Freq,                       Period (in uSeconds)
     ConfigCpuTimer(&CpuTimer0, LAUNCHPAD_CPU_FREQUENCY, 1000);
-    ConfigCpuTimer(&CpuTimer1, LAUNCHPAD_CPU_FREQUENCY, 20000);
+    ConfigCpuTimer(&CpuTimer1, LAUNCHPAD_CPU_FREQUENCY, 4000);
     ConfigCpuTimer(&CpuTimer2, LAUNCHPAD_CPU_FREQUENCY, 40000);
 
     // Enable CpuTimer Interrupt bit TIE
     CpuTimer0Regs.TCR.all = 0x4000;
     CpuTimer1Regs.TCR.all = 0x4000;
     CpuTimer2Regs.TCR.all = 0x4000;
+    //-------------------------EPWM2--------------------------------
+    //AMBSCK EPWM2 pinmux and initializations for 20Khz carrier frequency
+    EPwm2Regs.TBCTL.bit.CTRMODE=0;//set counter mode to count up
+    EPwm2Regs.TBCTL.bit.FREE_SOFT=2;//set free soft to free run
+    EPwm2Regs.TBCTL.bit.PHSEN=0;//disable phase loading
+    EPwm2Regs.TBCTL.bit.CLKDIV=0; //clock divide by 1 to keep clock and counter frequencies the same
 
+    EPwm2Regs.TBCTR=0; //initialize counter value to 0
+
+    EPwm2Regs.TBPRD=2500; //period of wave/period of clock gives clock counts per wave
+
+    EPwm2Regs.CMPA.bit.CMPA=2500;//set to 0 for 0% duty cycle, instantly turns signal low
+    EPwm2Regs.CMPB.bit.CMPB=2500;
+    EPwm2Regs.AQCTLA.bit.CAU=1;//action when TBCTR=CMPA (falling edge) set signal low
+    EPwm2Regs.AQCTLB.bit.CBU=1;//do the same for EPWM2B
+    EPwm2Regs.AQCTLA.bit.ZRO=2;//action when TBCTR=0 (beginning of period) set signal high
+    EPwm2Regs.AQCTLB.bit.ZRO=2;
+
+    EPwm2Regs.TBPHS.bit.TBPHS =0;
+
+    GPIO_SetupPinMux(2, GPIO_MUX_CPU1, 1); //2A
+    GPIO_SetupPinMux(3, GPIO_MUX_CPU1, 1); //2B
     init_serialSCIA(&SerialA,115200);
-
+    //--------------------------------------------------------------------
     //AMBSCK set up registers to use SCI
     GPIO_SetupPinMux(9, GPIO_MUX_CPU1, 0); // Set as GPIO9 and used as DAN28027 SS
     GPIO_SetupPinOptions(9, GPIO_OUTPUT, GPIO_PUSHPULL); // Make GPIO9 an Output Pin
@@ -351,6 +437,7 @@ void main(void)
     init_serialSCIC(&SerialC,115200);
     init_serialSCID(&SerialD,115200);
     setupSpib();
+    init_eQEPs();//AMBSCK initialize eQEP peripheral
 
     // Enable global Interrupts and higher priority real-time debug events
     EINT;  // Enable Global interrupt INTM
@@ -360,8 +447,13 @@ void main(void)
     while(1)
     {
         if (UARTPrint == 1 ) {
-            //serial_printf(&SerialA,"PWM1: %.3f PWM2: %.3f\r\n",v1,v2);
-            serial_printf(&SerialA,"Accx: %.3f Accy: %.3f Accz: %.3f Gx: %.3f Gy: %.3f Gz: %.3f\r\n",accx,accy,accz,gx,gy,gz);
+            //serial_printf(&SerialA,"Left Wheel Angle: %.3f Right Wheel Angle: %.3f\r\n",leftAngle,rightAngle);
+            //serial_printf(&SerialA,"Left Wheel Dist: %.3f Right Wheel Dist: %.3f\r\n",leftDist,rightDist);
+            //serial_printf(&SerialA,"Accx: %.3f Accy: %.3f Accz: %.3f Gx: %.3f Gy: %.3f Gz: %.3f\r\n",accx,accy,accz,gx,gy,gz);
+            //serial_printf(&SerialA,"Left Wheel Vel: %.3f Right Wheel Vel: %.3f\r\n",leftVel,rightVel);
+            //serial_printf(&SerialA,"Vref: %.3f Turn: %.3f\r\n",Vref,turn);
+            serial_printf(&SerialA,"Vref: %.3f Turn: %.3f poseX: %.3f poseY: %.3f\r\n",Vref,turn,poseX,poseY);
+
             UARTPrint = 0;
         }
     }
@@ -458,7 +550,94 @@ __interrupt void cpu_timer0_isr(void)
 // cpu_timer1_isr - CPU Timer1 ISR
 __interrupt void cpu_timer1_isr(void)
 {
+    numTimer1calls++;
 
+    leftAngle = readEncLeft();
+    rightAngle = readEncRight();
+
+    leftOmega = (leftAngle-leftAngle_1)/0.004;
+    rightOmega = (rightAngle-rightAngle_1)/0.004;
+    leftAngle_1 = leftAngle;
+    rightAngle_1 = rightAngle;
+    //AMBSCK store previous values of distance
+    leftDist_1 = leftDist;
+    rightDist_1 = rightDist;
+
+    leftDist = leftAngle/5.1;//AMBSCK convert angle in rad to distance in ft
+    rightDist = rightAngle/5.1;
+    //AMBSCK calculate velocity
+    leftVel = (leftDist - leftDist_1)/0.004;
+    rightVel = (rightDist - rightDist_1)/0.004;
+
+    omegaAvg = 0.5*(leftOmega+rightOmega);
+    phi = (Rwh/Wr)*(rightAngle-leftAngle);
+    velX = Rwh*omegaAvg*cos(phi);
+    velY = Rwh*omegaAvg*sin(phi);
+    poseX = poseX + 0.5*(velX+velX_1)*0.004;
+    poseY = poseY + 0.5*(velY+velY_1)*0.004;
+    velX_1 = velX;
+    velY_1 = velY;
+    //calculate turn control law
+    eturn = turn + leftVel - rightVel;
+
+    //calculate control law AMBSCK
+    e_L = Vref-leftVel - Kpturn*eturn;
+    I_L=I_1_L+0.004*(e_L+e_1_L);
+    uLeft = Kp*e_L+Ki*I_L;
+    if(abs(uLeft) >= 10.0){
+        I_L=I_1_L;
+    }//prevent integral windup
+    //save past states AMBSCK
+    e_1_L = e_L;
+    I_1_L = I_L;
+
+    //calculate control law AMBSCK
+    e_R = Vref-rightVel + Kpturn*eturn;
+    I_R=I_1_R+0.004*(e_R+e_1_R);
+    uRight = Kp*e_R+Ki*I_R;
+    if(abs(uRight) >= 10.0){
+        I_R=I_1_R;
+    }//prevent integral windup
+    //save past states AMBSCK
+    e_1_R = e_R;
+    I_1_R = I_R;
+
+
+    setEPWM2A(uRight);//AMBSCK 2A commands right side`
+    setEPWM2B(-uLeft);
+
+    //AMBSCK send to labview
+    if (NewLVData == 1) {
+        NewLVData = 0;
+        Vref = fromLVvalues[0];
+        turn = fromLVvalues[1];
+        printLV3 = fromLVvalues[2];
+        printLV4 = fromLVvalues[3];
+        printLV5 = fromLVvalues[4];
+        printLV6 = fromLVvalues[5];
+        printLV7 = fromLVvalues[6];
+        printLV8 = fromLVvalues[7];
+    }
+    if((numTimer1calls%62) == 0) { // change to the counter variable of you selected 4ms. timer
+        DataToLabView.floatData[0] = poseX;
+        DataToLabView.floatData[1] = poseY;
+        DataToLabView.floatData[2] = phi;
+        DataToLabView.floatData[3] = 2.0*((float)numTimer0calls)*.001;
+        DataToLabView.floatData[4] = 3.0*((float)numTimer0calls)*.001;
+        DataToLabView.floatData[5] = (float)numTimer0calls;
+        DataToLabView.floatData[6] = (float)numTimer0calls*4.0;
+        DataToLabView.floatData[7] = (float)numTimer0calls*5.0;
+        LVsenddata[0] = '*'; // header for LVdata
+        LVsenddata[1] = '$';
+        for (int i=0;i<LVNUM_TOFROM_FLOATS*4;i++) {
+            if (i%2==0) {
+                LVsenddata[i+2] = DataToLabView.rawData[i/2] & 0xFF;
+            } else {
+                LVsenddata[i+2] = (DataToLabView.rawData[i/2]>>8) & 0xFF;
+            }
+        }
+        serial_sendSCID(&SerialD, LVsenddata, 4*LVNUM_TOFROM_FLOATS + 2);
+    }
     CpuTimer1.InterruptCount++;
 }
 
@@ -710,3 +889,91 @@ void setupSpib(void) //Call this function in main() somewhere after the DINT; li
     SpibRegs.SPIFFRX.bit.RXFFINTCLR=1; // Clear Interrupt flag
     PieCtrlRegs.PIEACK.all = PIEACK_GROUP6;
 }
+void init_eQEPs(void) {
+    // setup eQEP1 pins for input
+    EALLOW;
+    //Disable internal pull-up for the selected output pins for reduced power consumption
+    GpioCtrlRegs.GPAPUD.bit.GPIO20 = 1; // Disable pull-up on GPIO20 (EQEP1A)
+    GpioCtrlRegs.GPAPUD.bit.GPIO21 = 1; // Disable pull-up on GPIO21 (EQEP1B)
+    GpioCtrlRegs.GPAQSEL2.bit.GPIO20 = 2; // Qual every 6 samples
+    GpioCtrlRegs.GPAQSEL2.bit.GPIO21 = 2; // Qual every 6 samples
+    EDIS;
+    // This specifies which of the possible GPIO pins will be EQEP1 functional pins.
+    // Comment out other unwanted lines.
+    GPIO_SetupPinMux(20, GPIO_MUX_CPU1, 1);
+    GPIO_SetupPinMux(21, GPIO_MUX_CPU1, 1);
+    EQep1Regs.QEPCTL.bit.QPEN = 0; // make sure eqep in reset
+    EQep1Regs.QDECCTL.bit.QSRC = 0; // Quadrature count mode
+    EQep1Regs.QPOSCTL.all = 0x0; // Disable eQep Position Compare
+    EQep1Regs.QCAPCTL.all = 0x0; // Disable eQep Capture
+    EQep1Regs.QEINT.all = 0x0; // Disable all eQep interrupts
+    EQep1Regs.QPOSMAX = 0xFFFFFFFF; // use full range of the 32 bit count
+    EQep1Regs.QEPCTL.bit.FREE_SOFT = 2; // EQep uneffected by emulation suspend in Code Composer
+    EQep1Regs.QPOSCNT = 0;
+    EQep1Regs.QEPCTL.bit.QPEN = 1; // Enable EQep
+
+    // setup QEP2 pins for input
+    EALLOW;
+    //Disable internal pull-up for the selected output pinsfor reduced power consumption
+    GpioCtrlRegs.GPBPUD.bit.GPIO54 = 1; // Disable pull-up on GPIO54 (EQEP2A)
+    GpioCtrlRegs.GPBPUD.bit.GPIO55 = 1; // Disable pull-up on GPIO55 (EQEP2B)
+    GpioCtrlRegs.GPBQSEL2.bit.GPIO54 = 2; // Qual every 6 samples
+    GpioCtrlRegs.GPBQSEL2.bit.GPIO55 = 2; // Qual every 6 samples
+    EDIS;
+    GPIO_SetupPinMux(54, GPIO_MUX_CPU1, 5); // set GPIO54 and eQep2A
+    GPIO_SetupPinMux(55, GPIO_MUX_CPU1, 5); // set GPIO54 and eQep2B
+    EQep2Regs.QEPCTL.bit.QPEN = 0; // make sure qep reset
+    EQep2Regs.QDECCTL.bit.QSRC = 0; // Quadrature count mode
+    EQep2Regs.QPOSCTL.all = 0x0; // Disable eQep Position Compare
+    EQep2Regs.QCAPCTL.all = 0x0; // Disable eQep Capture
+    EQep2Regs.QEINT.all = 0x0; // Disable all eQep interrupts
+    EQep2Regs.QPOSMAX = 0xFFFFFFFF; // use full range of the 32 bit count.
+    EQep2Regs.QEPCTL.bit.FREE_SOFT = 2; // EQep uneffected by emulation suspend
+    EQep2Regs.QPOSCNT = 0;
+    EQep2Regs.QEPCTL.bit.QPEN = 1; // Enable EQep
+}
+float readEncLeft(void) {
+    int32_t raw = 0;
+    uint32_t QEP_maxvalue = 0xFFFFFFFFU; //4294967295U
+    raw = EQep1Regs.QPOSCNT;
+    if (raw >= QEP_maxvalue/2) raw -= QEP_maxvalue; // I don't think this is needed and never true
+    // 100 slits in the encoder disk so 100 square waves per one revolution of the
+    // DC motor's back shaft. Then Quadrature Decoder mode multiplies this by 4 so 400 counts per one rev
+    // of the DC motor's back shaft. Then the gear motor's gear ratio is 30:1.
+    return (-raw*(2*PI/12000));
+}
+float readEncRight(void) {
+    int32_t raw = 0;
+    uint32_t QEP_maxvalue = 0xFFFFFFFFU; //4294967295U -1 32bit signed int
+    raw = EQep2Regs.QPOSCNT;
+    if (raw >= QEP_maxvalue/2) raw -= QEP_maxvalue; // I don't think this is needed and never true
+    // 100 slits in the encoder disk so 100 square waves per one revolution of the
+    // DC motor's back shaft. Then Quadrature Decoder mode multiplies this by 4 so 400 counts per one rev
+    // of the DC motor's back shaft. Then the gear motor's gear ratio is 30:1.
+    return (raw*(2*PI/12000));
+}
+
+//AMBSCK EPWM2 Functions to set duty cycle based on control effort
+void setEPWM2A(float uLeft){
+    //take value from -10 to 10 and map to value from 0 TBPRD=2500
+    if(uLeft>10){
+        uLeft=10;
+    }
+    if(uLeft<-10){
+        uLeft=-10;
+    }
+    uLeft=uLeft+10;//map 0 to 20 to 0 to 2500
+    EPwm2Regs.CMPA.bit.CMPA=(uLeft/20.0)*2500.0;
+}
+void setEPWM2B(float uRight){
+    //take value from -10 to 10 and map to value from 0 TBPRD=2500
+    if(uRight>10){
+        uRight=10;
+    }
+    if(uRight<-10){
+        uRight=-10;
+    }
+    uRight=uRight+10;//map 0 to 20 to 0 to 2500
+    EPwm2Regs.CMPB.bit.CMPB=(uRight/20.0)*2500.0;
+}
+

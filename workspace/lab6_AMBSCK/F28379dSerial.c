@@ -636,13 +636,16 @@ __interrupt void TXDINT_data_sent(void)
 }
 
 //for SerialA
+extern float turn;
+extern float Vref;
+//This function is called each time a char is recieved over UARTA.
+//for SerialA
 #ifdef _FLASH
 #pragma CODE_SECTION(RXAINT_recv_ready, ".TI.ramfunc");
 #endif
 __interrupt void RXAINT_recv_ready(void)
 {
     RXAdata = SciaRegs.SCIRXBUF.all;
-
     /* SCI PE or FE error */
     if (RXAdata & 0xC000) {
         SciaRegs.SCICTL1.bit.SWRESET = 0;
@@ -651,15 +654,20 @@ __interrupt void RXAINT_recv_ready(void)
         SciaRegs.SCIFFRX.bit.RXFIFORESET = 1;
     } else {
         RXAdata = RXAdata & 0x00FF;
-        char tmp[2];
-        tmp[0] = RXAdata;
-        serial_sendSCID(&SerialD, tmp,1);
         numRXA ++;
+        if (RXAdata == 'q') {
+            turn = turn + 0.05;
+        } else if (RXAdata == 'r') {
+            turn = turn - 0.05;
+        } else if (RXAdata == '3') {
+            Vref = Vref + 0.1;
+        } else {
+            turn = 0;
+            Vref = 0.5;
+        }
     }
-
     SciaRegs.SCIFFRX.bit.RXFFINTCLR = 1;
     PieCtrlRegs.PIEACK.all = PIEACK_GROUP9;
-
 }
 
 //for SerialB
