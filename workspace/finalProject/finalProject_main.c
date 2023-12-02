@@ -75,13 +75,20 @@ float I_1_L = 0.0;
 float e_1_L = 0.0;
 float I_1_R = 0.0;
 float e_1_R = 0.0;//AMBSCK memory variables for integrator
-float Kp = 3.0;
-float Ki = 20.0;
-float Kd = 0.08;
+float Kp = 3.0;//BALANCING SCK
+float Ki = 20.0;//BALANCING SCK
+float Kd = 0.08;//BALANCING SCK
+
+float Kp_d = 3.0; //driving sck
+float Ki_d = 5.0; //driving sck
+
 float Vref = 0.0;
 float turn = 0.0;
 float Kpturn = 3.0;
 float eturn = 0.0;
+float Kpwall = 3.0;
+float ewall = 0.0;
+
 
 //variable definition for wireless communication
 float printLV3 = 0;
@@ -201,7 +208,7 @@ float accelz_offset = 0;
 float gyrox_offset = 0;
 float gyroy_offset = 0;
 float gyroz_offset = 0;
-float accelzBalancePoint = -.6;
+float accelzBalancePoint = -0.75;//-0.6 with battery, -0.75 with cable
 int16 IMU_data[9];
 uint16_t temp=0;
 int16_t doneCal = 0;
@@ -231,6 +238,9 @@ float K1 = -60.0;
 float K2 = -4.5;
 float K3 = -1.1;
 float K4 = -0.1;
+
+//FOR STATE MACHINE
+uint16_t state = 1;//0 is driving, 1 is balancing
 
 void main(void)
 {
@@ -671,86 +681,145 @@ __interrupt void SWI_isr(void) {
 
 
     // Insert SWI ISR Code here.......
+    //WHEEL SPEEDS AND DISTANCES
     //calculate rates using derivative approximation
 
-    vel_left = 0.6*vel_left_1 + 100.0*(LeftWheel-LeftWheel_1);
+    vel_left = 0.6*vel_left_1 + 100.0*(LeftWheel-LeftWheel_1);//wheel speed left
 
 
-    vel_right = 0.6*vel_right_1 + 100.0*(RightWheel-RightWheel_1);
+    vel_right = 0.6*vel_right_1 + 100.0*(RightWheel-RightWheel_1);//wheel speed right
 
 
     gyro_rate = 0.6*gyro_rate_1 + 100.0*(gyro_value-gyro_value_1);
 
-    WhlDiff = LeftWheel-RightWheel;
-    vel_WhlDiff = 0.3333 * vel_WhlDiff_1 + 166.6667 * (WhlDiff - WhlDiff_1);
+    WhlDiff = LeftWheel-RightWheel;//dtheta between wheels
+    vel_WhlDiff = 0.3333 * vel_WhlDiff_1 + 166.6667 * (WhlDiff - WhlDiff_1);//dtheta dot between wheels
+    if(state==1){
+        //BALANCING CONTROL
+        //AMBSCK calculate control law using rates
+        //speed conrol law AMBSCK
+        eSpeed = (refSpeed - (vel_left+vel_right)/2.0);
 
-    //AMBSCK calculate control law using rates
-    //speed conrol law AMBSCK
-    eSpeed = (refSpeed - (vel_left+vel_right)/2.0);
-
-    turnref = turnref + 0.5*(turnRate+turnRate_1)*0.004;
-    errorDiff = turnref - WhlDiff;
-    if(fabs(turn)>=3.0){
-        //errorInt = errorInt; do nothing
-    }
-    else{
-        errorInt = errorInt + 0.5*(errorDiff+errorDiff_1)*0.004;//AMBSCK in lab day 2 come back and check this and variable definitions
-    }
-
-    if(fabs(uspd)>=3){
-
-    }
-    else{
-        intSpeed = intSpeed + 0.5*(eSpeed+eSpeed_1)*0.004;
-    }
-    ubal = -K1 * tilt_value - K2 * gyro_value - K3 * (vel_left + vel_right) / 2.0 - K4 * gyro_rate;
-    uspd = Kp_s * eSpeed + Ki_s * intSpeed;
-    //AMBSCK PID control for turn command'
-    turn = Kp*errorDiff + Ki*errorInt -Kd*vel_WhlDiff;
-    if(fabs(turn)>=4.0){
-        if(turn<0){
-            turn = -4.0;
+        turnref = turnref + 0.5*(turnRate+turnRate_1)*0.004;
+        errorDiff = turnref - WhlDiff;
+        if(fabs(turn)>=3.0){
+            //errorInt = errorInt; do nothing
         }
         else{
-            turn = 4.0;
+            errorInt = errorInt + 0.5*(errorDiff+errorDiff_1)*0.004;//AMBSCK in lab day 2 come back and check this and variable definitions
         }
-    }
-    if(fabs(uspd)>=4.0){
-        if(uspd<0){
-            uspd = -4.0;
+
+        if(fabs(uspd)>=3){
+
         }
         else{
-            uspd = 4.0;
+            intSpeed = intSpeed + 0.5*(eSpeed+eSpeed_1)*0.004;
         }
+        ubal = -K1 * tilt_value - K2 * gyro_value - K3 * (vel_left + vel_right) / 2.0 - K4 * gyro_rate;
+        uspd = Kp_s * eSpeed + Ki_s * intSpeed;
+        //AMBSCK PID control for turn command'
+        turn = Kp*errorDiff + Ki*errorInt -Kd*vel_WhlDiff;
+        if(fabs(turn)>=4.0){
+            if(turn<0){
+                turn = -4.0;
+            }
+            else{
+                turn = 4.0;
+            }
+        }
+        if(fabs(uspd)>=4.0){
+            if(uspd<0){
+                uspd = -4.0;
+            }
+            else{
+                uspd = 4.0;
+            }
+        }
+        //AMBSCK calculate control effort
+        uLeft = ubal / 2.0 + turn - uspd;
+        uRight = ubal / 2.0 - turn - uspd;
+
+        //AMBSCK write to EPWM2 to control motors
+        setEPWM2A(uRight);//AMBSCK 2A commands right side`
+        setEPWM2B(-uLeft);
+
+        numSWIcalls++;
+
+        vel_left_1 = vel_left;
+        vel_right_1 = vel_right;
+        gyro_rate_1 = gyro_rate;
+        LeftWheel_1 = LeftWheel;
+        RightWheel_1 = RightWheel;
+        gyro_value_1 = gyro_value;
+        WhlDiff_1 = WhlDiff;
+        vel_WhlDiff_1 = vel_WhlDiff;
+        errorDiff_1 = errorDiff;
+        errorInt_1 = errorInt;
+
+        turnRate_1 = turnRate;
+        turnref_1 = turnref;
+
+        eSpeed_1 = eSpeed;
+        intSpeed_1 = intSpeed;
     }
+    if(state==0){
+        //driving control code
+        leftAngle = readEncLeft();
+        rightAngle = readEncRight();
 
-    //AMBSCK calculate control effort
-    uLeft = ubal / 2.0 + turn - uspd;
-    uRight = ubal / 2.0 - turn - uspd;
+        leftOmega = (leftAngle-leftAngle_1)/0.004;
+        rightOmega = (rightAngle-rightAngle_1)/0.004;
+        leftAngle_1 = leftAngle;
+        rightAngle_1 = rightAngle;
+        //AMBSCK store previous values of distance
+        leftDist_1 = leftDist;
+        rightDist_1 = rightDist;
 
-    //AMBSCK write to EPWM2 to control motors
-    setEPWM2A(uRight);//AMBSCK 2A commands right side`
-    setEPWM2B(-uLeft);
+        leftDist = leftAngle/5.1;//AMBSCK convert angle in rad to distance in ft
+        rightDist = rightAngle/5.1;
+        //AMBSCK calculate velocity
+        leftVel = (leftDist - leftDist_1)/0.004;
+        rightVel = (rightDist - rightDist_1)/0.004;
 
-    numSWIcalls++;
+        omegaAvg = 0.5*(leftOmega+rightOmega);
+        phi = (Rwh/Wr)*(rightAngle-leftAngle);
+        velX = Rwh*omegaAvg*cos(phi);
+        velY = Rwh*omegaAvg*sin(phi);
+        poseX = poseX + 0.5*(velX+velX_1)*0.004;
+        poseY = poseY + 0.5*(velY+velY_1)*0.004;
+        velX_1 = velX;
+        velY_1 = velY;
+        //calculate turn control law
+        eturn = turn + leftVel - rightVel;
+        //calculate wall avoidance control law
+        ewall = joyxk[0]-joyyk[0]; //if the wall is closer then the joy reading is higher. turn=L-R so left should increase turn and right should decrease it.
+                               //assume x is left, y is right... add this to left and subtract from right
+        //calculate control law AMBSCK
+        e_L = Vref-leftVel - Kpturn*eturn + Kpwall*ewall;
+        I_L=I_1_L+0.004*(e_L+e_1_L);
+        uLeft = Kp_d*e_L+Ki_d*I_L;
+        if(abs(uLeft) >= 10.0){
+            I_L=I_1_L;
+        }//prevent integral windup
+        //save past states AMBSCK
+        e_1_L = e_L;
+        I_1_L = I_L;
 
-    vel_left_1 = vel_left;
-    vel_right_1 = vel_right;
-    gyro_rate_1 = gyro_rate;
-    LeftWheel_1 = LeftWheel;
-    RightWheel_1 = RightWheel;
-    gyro_value_1 = gyro_value;
-    WhlDiff_1 = WhlDiff;
-    vel_WhlDiff_1 = vel_WhlDiff;
-    errorDiff_1 = errorDiff;
-    errorInt_1 = errorInt;
+        //calculate control law AMBSCK
+        e_R = Vref-rightVel + Kpturn*eturn - Kpwall*ewall;
+        I_R=I_1_R+0.004*(e_R+e_1_R);
+        uRight = Kp_d*e_R+Ki_d*I_R;
+        if(abs(uRight) >= 10.0){
+            I_R=I_1_R;
+        }//prevent integral windup
+        //save past states AMBSCK
+        e_1_R = e_R;
+        I_1_R = I_R;
 
-    turnRate_1 = turnRate;
-    turnref_1 = turnref;
 
-    eSpeed_1 = eSpeed;
-    intSpeed_1 = intSpeed;
-
+        setEPWM2A(uRight);//AMBSCK 2A commands right side`
+        setEPWM2B(-uLeft);
+    }
     DINT;
 
 
@@ -860,61 +929,6 @@ __interrupt void cpu_timer0_isr(void)
 __interrupt void cpu_timer1_isr(void)
 {
     numTimer1calls++;
-    /*
-    leftAngle = readEncLeft();
-    rightAngle = readEncRight();
-
-    leftOmega = (leftAngle-leftAngle_1)/0.004;
-    rightOmega = (rightAngle-rightAngle_1)/0.004;
-    leftAngle_1 = leftAngle;
-    rightAngle_1 = rightAngle;
-    //AMBSCK store previous values of distance
-    leftDist_1 = leftDist;
-    rightDist_1 = rightDist;
-
-    leftDist = leftAngle/5.1;//AMBSCK convert angle in rad to distance in ft
-    rightDist = rightAngle/5.1;
-    //AMBSCK calculate velocity
-    leftVel = (leftDist - leftDist_1)/0.004;
-    rightVel = (rightDist - rightDist_1)/0.004;
-
-    omegaAvg = 0.5*(leftOmega+rightOmega);
-    phi = (Rwh/Wr)*(rightAngle-leftAngle);
-    velX = Rwh*omegaAvg*cos(phi);
-    velY = Rwh*omegaAvg*sin(phi);
-    poseX = poseX + 0.5*(velX+velX_1)*0.004;
-    poseY = poseY + 0.5*(velY+velY_1)*0.004;
-    velX_1 = velX;
-    velY_1 = velY;
-    //calculate turn control law
-    eturn = turn + leftVel - rightVel;
-
-    //calculate control law AMBSCK
-    e_L = Vref-leftVel - Kpturn*eturn;
-    I_L=I_1_L+0.004*(e_L+e_1_L);
-    uLeft = Kp*e_L+Ki*I_L;
-    if(abs(uLeft) >= 10.0){
-        I_L=I_1_L;
-    }//prevent integral windup
-    //save past states AMBSCK
-    e_1_L = e_L;
-    I_1_L = I_L;
-
-    //calculate control law AMBSCK
-    e_R = Vref-rightVel + Kpturn*eturn;
-    I_R=I_1_R+0.004*(e_R+e_1_R);
-    uRight = Kp*e_R+Ki*I_R;
-    if(abs(uRight) >= 10.0){
-        I_R=I_1_R;
-    }//prevent integral windup
-    //save past states AMBSCK
-    e_1_R = e_R;
-    I_1_R = I_R;
-
-
-    setEPWM2A(uRight);//AMBSCK 2A commands right side`
-    setEPWM2B(-uLeft);
-     */
 
     CpuTimer1.InterruptCount++;
 }
@@ -1325,6 +1339,7 @@ void setEPWM2B(float uRight){
     EPwm2Regs.CMPB.bit.CMPB=(uRight/20.0)*2500.0;
 }
 //AMBSCK ADCA interrupt function to sample joystick
+//sck edited function to sample ADCA2 and 3 as IR distance sensor readings. Inverts voltage.
 __interrupt void ADCA_ISR (void) {
     numADCacalls++;
     adca2result = AdcaResultRegs.ADCRESULT0;
@@ -1332,8 +1347,8 @@ __interrupt void ADCA_ISR (void) {
     adcina2v=0;
     adcina3v=0;
     // Here covert ADCINA2 to volts
-    joyxk[0] = adca2result/4096.0*3.0;
-    joyyk[0] = adca3result/4096.0*3.0;
+    joyxk[0] = adca2result/4096.0*5.3;
+    joyyk[0] = adca3result/4096.0*5.3;
     //AMBSCK start SPI transmission and reception of acc and gyro
     GpioDataRegs.GPCCLEAR.bit.GPIO66 = 1;
     SpibRegs.SPIFFRX.bit.RXFFIL = 8;
@@ -1363,7 +1378,7 @@ __interrupt void ADCA_ISR (void) {
     if((numADCacalls%100)==0){
         UARTPrint = 1;
     }
-    */
+     */
     // Print ADCIND0’s voltage value to TeraTerm every 100ms
     AdcaRegs.ADCINTFLGCLR.bit.ADCINT1 = 1; //clear interrupt flag
     PieCtrlRegs.PIEACK.all = PIEACK_GROUP1;
