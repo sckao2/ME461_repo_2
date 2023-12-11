@@ -82,11 +82,11 @@ float Kd = 0.08;//BALANCING SCK
 float Kp_d = 3.0; //driving sck
 float Ki_d = 5.0; //driving sck
 
-float Vref = 0.0;
+float Vref = 1.0;
 float turn = 0.0;
 float Kpturn = 3.0;
 float eturn = 0.0;
-float Kpwall = 3.0;
+float Kpwall = 6.0;
 float ewall = 0.0;
 
 
@@ -240,7 +240,7 @@ float K3 = -1.1;
 float K4 = -0.1;
 
 //FOR STATE MACHINE
-uint16_t state = 1;//0 is driving, 1 is balancing
+uint16_t state = 0;//0 is driving, 1 is balancing
 
 void main(void)
 {
