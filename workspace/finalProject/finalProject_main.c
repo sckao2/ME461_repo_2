@@ -40,7 +40,6 @@ float readEncLeft(void);
 float readEncRight(void);
 void setEPWM2A(float uLeft);
 void setEPWM2B(float uRight);
-void PIcontroller(float Kp, float Ki, float Vref, float V, float I_1, float e_1);
 //lab 6 variable definitions AMBSCK
 float leftAngle = 0.0;
 float rightAngle = 0.0;//store wheel angles AMBSCK;
@@ -82,13 +81,15 @@ float Kd = 0.08;//BALANCING SCK
 float Kp_d = 3.0; //driving sck
 float Ki_d = 5.0; //driving sck
 
-float Vref = 1.0;
+float Vref = 0.0;
 float turn = 0.0;
 float Kpturn = 3.0;
 float eturn = 0.0;
 float Kpwall = 6.0;
 float ewall = 0.0;
-
+uint16_t firstRun = 1;
+uint16_t stopped = 0;
+uint32_t startCycle = 0;
 
 //variable definition for wireless communication
 float printLV3 = 0;
@@ -240,7 +241,7 @@ float K3 = -1.1;
 float K4 = -0.1;
 
 //FOR STATE MACHINE
-uint16_t state = 0;//0 is driving, 1 is balancing
+uint16_t state = 1;//0 is driving, 1 is balancing, 2 is getting back up
 
 void main(void)
 {
@@ -764,98 +765,117 @@ __interrupt void SWI_isr(void) {
     }
     if(state==0){
         //driving control code
-        leftAngle = readEncLeft();
-        rightAngle = readEncRight();
+        if(firstRun == 1){//SCK first time through the loop, save the current time
+            Vref = 2.0;//drive this fast at the start
+            startCycle = numTimer1calls;//SCK this is when we started driving, compare to current time to know when to stop.
+            firstRun = 0;
+        }
+        if(firstRun == 0){//if it's not the first time through the cycle
+            if(stopped == 0){//if the robot hasn't reached stop time
+                if(startCycle+1250 - numTimer1calls < 100){//check if it is stop time
+                    //SCK 1250 is how many cycles of timer 1 (period 4000us) this equates to 5 seconds of driving.
+                    Vref = 0;//stop driving
+                    stopped = 1;//don't do anything else
+                    setEPWM2A(0);//AMBSCK 2A commands right side`
+                    setEPWM2B(0);
+                    state = 2;
+                }
+            }
 
-        leftOmega = (leftAngle-leftAngle_1)/0.004;
-        rightOmega = (rightAngle-rightAngle_1)/0.004;
-        leftAngle_1 = leftAngle;
-        rightAngle_1 = rightAngle;
-        //AMBSCK store previous values of distance
-        leftDist_1 = leftDist;
-        rightDist_1 = rightDist;
+            if(stopped == 0){//SCK if the robot is not stopped, run control laws to drive, turn, and avoid walls. Use vref for speed, turn for turn, tune avoidance with Kpwall and tune how long with the constant in the loop above.
+                leftAngle = readEncLeft();
+                rightAngle = readEncRight();
 
-        leftDist = leftAngle/5.1;//AMBSCK convert angle in rad to distance in ft
-        rightDist = rightAngle/5.1;
-        //AMBSCK calculate velocity
-        leftVel = (leftDist - leftDist_1)/0.004;
-        rightVel = (rightDist - rightDist_1)/0.004;
+                leftOmega = (leftAngle-leftAngle_1)/0.004;
+                rightOmega = (rightAngle-rightAngle_1)/0.004;
+                leftAngle_1 = leftAngle;
+                rightAngle_1 = rightAngle;
+                //AMBSCK store previous values of distance
+                leftDist_1 = leftDist;
+                rightDist_1 = rightDist;
 
-        omegaAvg = 0.5*(leftOmega+rightOmega);
-        phi = (Rwh/Wr)*(rightAngle-leftAngle);
-        velX = Rwh*omegaAvg*cos(phi);
-        velY = Rwh*omegaAvg*sin(phi);
-        poseX = poseX + 0.5*(velX+velX_1)*0.004;
-        poseY = poseY + 0.5*(velY+velY_1)*0.004;
-        velX_1 = velX;
-        velY_1 = velY;
-        //calculate turn control law
-        eturn = turn + leftVel - rightVel;
-        //calculate wall avoidance control law
-        ewall = joyxk[0]-joyyk[0]; //if the wall is closer then the joy reading is higher. turn=L-R so left should increase turn and right should decrease it.
-                               //assume x is left, y is right... add this to left and subtract from right
-        //calculate control law AMBSCK
-        e_L = Vref-leftVel - Kpturn*eturn + Kpwall*ewall;
-        I_L=I_1_L+0.004*(e_L+e_1_L);
-        uLeft = Kp_d*e_L+Ki_d*I_L;
-        if(abs(uLeft) >= 10.0){
-            I_L=I_1_L;
-        }//prevent integral windup
-        //save past states AMBSCK
-        e_1_L = e_L;
-        I_1_L = I_L;
+                leftDist = leftAngle/5.1;//AMBSCK convert angle in rad to distance in ft
+                rightDist = rightAngle/5.1;
+                //AMBSCK calculate velocity
+                leftVel = (leftDist - leftDist_1)/0.004;
+                rightVel = (rightDist - rightDist_1)/0.004;
 
-        //calculate control law AMBSCK
-        e_R = Vref-rightVel + Kpturn*eturn - Kpwall*ewall;
-        I_R=I_1_R+0.004*(e_R+e_1_R);
-        uRight = Kp_d*e_R+Ki_d*I_R;
-        if(abs(uRight) >= 10.0){
-            I_R=I_1_R;
-        }//prevent integral windup
-        //save past states AMBSCK
-        e_1_R = e_R;
-        I_1_R = I_R;
+                omegaAvg = 0.5*(leftOmega+rightOmega);
+                phi = (Rwh/Wr)*(rightAngle-leftAngle);
+                velX = Rwh*omegaAvg*cos(phi);
+                velY = Rwh*omegaAvg*sin(phi);
+                poseX = poseX + 0.5*(velX+velX_1)*0.004;
+                poseY = poseY + 0.5*(velY+velY_1)*0.004;
+                velX_1 = velX;
+                velY_1 = velY;
+                //calculate turn control law
+                eturn = turn + leftVel - rightVel;
+                //calculate wall avoidance control law
+                ewall = joyxk[0]-joyyk[0]; //if the wall is closer then the joy reading is higher. turn=L-R so left should increase turn and right should decrease it.
+                //assume x is left, y is right... add this to left and subtract from right
+                //calculate control law AMBSCK
+                e_L = Vref-leftVel - Kpturn*eturn + Kpwall*ewall;
+                I_L=I_1_L+0.004*(e_L+e_1_L);
+                uLeft = Kp_d*e_L+Ki_d*I_L;
+                if(abs(uLeft) >= 10.0){
+                    I_L=I_1_L;
+                }//prevent integral windup
+                //save past states AMBSCK
+                e_1_L = e_L;
+                I_1_L = I_L;
 
-
-        setEPWM2A(uRight);//AMBSCK 2A commands right side`
-        setEPWM2B(-uLeft);
-    }
-    DINT;
+                //calculate control law AMBSCK
+                e_R = Vref-rightVel + Kpturn*eturn - Kpwall*ewall;
+                I_R=I_1_R+0.004*(e_R+e_1_R);
+                uRight = Kp_d*e_R+Ki_d*I_R;
+                if(abs(uRight) >= 10.0){
+                    I_R=I_1_R;
+                }//prevent integral windup
+                //save past states AMBSCK
+                e_1_R = e_R;
+                I_1_R = I_R;
 
 
-    //AMBSCK send to labview
-    if (NewLVData == 1) {
-        NewLVData = 0;
-        refSpeed = fromLVvalues[0];
-        turnRate = fromLVvalues[1];
-        printLV3 = fromLVvalues[2];
-        printLV4 = fromLVvalues[3];
-        printLV5 = fromLVvalues[4];
-        printLV6 = fromLVvalues[5];
-        printLV7 = fromLVvalues[6];
-        printLV8 = fromLVvalues[7];
-    }
-    if((numSWIcalls%62) == 0) { // change to the counter variable of you selected 4ms. timer
-        DataToLabView.floatData[0] = poseX;
-        DataToLabView.floatData[1] = poseY;
-        DataToLabView.floatData[2] = phi;
-        DataToLabView.floatData[3] = 2.0*((float)numSWIcalls)*.001;
-        DataToLabView.floatData[4] = 3.0*((float)numSWIcalls)*.001;
-        DataToLabView.floatData[5] = (float)numSWIcalls;
-        DataToLabView.floatData[6] = (float)numSWIcalls*4.0;
-        DataToLabView.floatData[7] = (float)numSWIcalls*5.0;
-        LVsenddata[0] = '*'; // header for LVdata
-        LVsenddata[1] = '$';
-        for (int i=0;i<LVNUM_TOFROM_FLOATS*4;i++) {
-            if (i%2==0) {
-                LVsenddata[i+2] = DataToLabView.rawData[i/2] & 0xFF;
-            } else {
-                LVsenddata[i+2] = (DataToLabView.rawData[i/2]>>8) & 0xFF;
+                setEPWM2A(uRight);//AMBSCK 2A commands right side`
+                setEPWM2B(-uLeft);
+            }
+            DINT;
+
+
+            //AMBSCK send to labview
+            if (NewLVData == 1) {
+                NewLVData = 0;
+                refSpeed = fromLVvalues[0];
+                turnRate = fromLVvalues[1];
+                printLV3 = fromLVvalues[2];
+                printLV4 = fromLVvalues[3];
+                printLV5 = fromLVvalues[4];
+                printLV6 = fromLVvalues[5];
+                printLV7 = fromLVvalues[6];
+                printLV8 = fromLVvalues[7];
+            }
+            if((numSWIcalls%62) == 0) { // change to the counter variable of you selected 4ms. timer
+                DataToLabView.floatData[0] = poseX;
+                DataToLabView.floatData[1] = poseY;
+                DataToLabView.floatData[2] = phi;
+                DataToLabView.floatData[3] = 2.0*((float)numSWIcalls)*.001;
+                DataToLabView.floatData[4] = 3.0*((float)numSWIcalls)*.001;
+                DataToLabView.floatData[5] = (float)numSWIcalls;
+                DataToLabView.floatData[6] = (float)numSWIcalls*4.0;
+                DataToLabView.floatData[7] = (float)numSWIcalls*5.0;
+                LVsenddata[0] = '*'; // header for LVdata
+                LVsenddata[1] = '$';
+                for (int i=0;i<LVNUM_TOFROM_FLOATS*4;i++) {
+                    if (i%2==0) {
+                        LVsenddata[i+2] = DataToLabView.rawData[i/2] & 0xFF;
+                    } else {
+                        LVsenddata[i+2] = (DataToLabView.rawData[i/2]>>8) & 0xFF;
+                    }
+                }
+                serial_sendSCID(&SerialD, LVsenddata, 4*LVNUM_TOFROM_FLOATS + 2);
             }
         }
-        serial_sendSCID(&SerialD, LVsenddata, 4*LVNUM_TOFROM_FLOATS + 2);
     }
-
 }
 
 // cpu_timer0_isr - CPU Timer0 ISR
