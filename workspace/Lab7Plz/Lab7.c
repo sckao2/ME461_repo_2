@@ -40,17 +40,7 @@ float readEncLeft(void);
 float readEncRight(void);
 void setEPWM2A(float uLeft);
 void setEPWM2B(float uRight);
-
-// Functions responsible for righting if robot
-void setEPWM8A_RCServo(float); // Left lever
-void setEPWM8B_RCServo(float); // Right Lever
-float rightAngleState1 = 97;
-float leftAngleState1 = -99;
-float leftAngleState2 = 20;
-float rightAngleState2 = -35;
-
-uint32_t hunch = 0;
-
+void PIcontroller(float Kp, float Ki, float Vref, float V, float I_1, float e_1);
 //lab 6 variable definitions AMBSCK
 float leftAngle = 0.0;
 float rightAngle = 0.0;//store wheel angles AMBSCK;
@@ -85,23 +75,13 @@ float I_1_L = 0.0;
 float e_1_L = 0.0;
 float I_1_R = 0.0;
 float e_1_R = 0.0;//AMBSCK memory variables for integrator
-float Kp = 3.0;//BALANCING SCK
-float Ki = 20.0;//BALANCING SCK
-float Kd = 0.08;//BALANCING SCK
-
-float Kp_d = 3.0; //driving sck
-float Ki_d = 5.0; //driving sck
-
-float Vref = 0;
+float Kp = 3.0;
+float Ki = 20.0;
+float Kd = 0.08;
+float Vref = 0.0;
 float turn = 0.0;
-float turn_0 = 0.0;
 float Kpturn = 3.0;
 float eturn = 0.0;
-float Kpwall = 6.0;
-float ewall = 0.0;
-uint16_t firstRun = 1;
-uint16_t stopped = 0;
-uint32_t startCycle = 0;
 
 //variable definition for wireless communication
 float printLV3 = 0;
@@ -133,8 +113,6 @@ int16_t spivalue3 = 0.0;
 int16_t pwmcmd1 = 0;
 int16_t pwmcmd2 = 0;
 int16_t upcount = 1;
-int16_t coolDown= 1; // responsible for delay after switching from state 2 to state 1
-int32_t coolDownTime; // responsible for timing the delay based on numTimer1Calls
 float v1 = 0.0;
 float v2 = 0.0;
 
@@ -205,13 +183,13 @@ float xk_4 = 0;
 float yk = 0;
 //b is the filter coefficients
 //float b[5] = {0.2,0.2,0.2,0.2,0.2}; // 0.2 is 1/5th therefore a 5 point average
-#define ARRAYSIZE 129
+#define ARRAYSIZE 22
 float xk[ARRAYSIZE]={0};
 float joyxk[ARRAYSIZE]={0};
 float joyyk[ARRAYSIZE]={0};
 float bxk[ARRAYSIZE]={0};
 //float b[ARRAYSIZE]={    3.3833240118424500e-02, 2.4012702387971543e-01, 4.5207947200372001e-01, 2.4012702387971543e-01, 3.3833240118424500e-02};
-//float b[22]={   -2.3890045153263611e-03,    -3.3150057635348224e-03,    -4.6136191242627002e-03,    -4.1659855521681268e-03,    1.4477422497795286e-03, 1.5489414225159667e-02, 3.9247886844071371e-02, 7.0723964095458614e-02, 1.0453473887246176e-01, 1.3325672639406205e-01, 1.4978314227429904e-01, 1.4978314227429904e-01, 1.3325672639406205e-01, 1.0453473887246176e-01, 7.0723964095458614e-02, 3.9247886844071371e-02, 1.5489414225159667e-02, 1.4477422497795286e-03, -4.1659855521681268e-03,    -4.6136191242627002e-03,    -3.3150057635348224e-03,    -2.3890045153263611e-03};
+float b[22]={   -2.3890045153263611e-03,    -3.3150057635348224e-03,    -4.6136191242627002e-03,    -4.1659855521681268e-03,    1.4477422497795286e-03, 1.5489414225159667e-02, 3.9247886844071371e-02, 7.0723964095458614e-02, 1.0453473887246176e-01, 1.3325672639406205e-01, 1.4978314227429904e-01, 1.4978314227429904e-01, 1.3325672639406205e-01, 1.0453473887246176e-01, 7.0723964095458614e-02, 3.9247886844071371e-02, 1.5489414225159667e-02, 1.4477422497795286e-03, -4.1659855521681268e-03,    -4.6136191242627002e-03,    -3.3150057635348224e-03,    -2.3890045153263611e-03};
 //float b[32]={   -6.3046914864397922e-04,    -1.8185681242784432e-03,    -2.5619416124584822e-03,    -1.5874939943956356e-03,    2.3695126689747326e-03, 8.3324969783531780e-03, 1.1803612855040625e-02, 6.7592967793297151e-03, -9.1745119977290398e-03,    -2.9730906886035850e-02,    -3.9816452266421651e-02,    -2.2301647638687881e-02,    3.1027965907247105e-02, 1.1114350049251465e-01, 1.9245540210070616e-01, 2.4373020388648489e-01, 2.4373020388648489e-01, 1.9245540210070616e-01, 1.1114350049251465e-01, 3.1027965907247105e-02, -2.2301647638687881e-02,    -3.9816452266421651e-02,    -2.9730906886035850e-02,    -9.1745119977290398e-03,    6.7592967793297151e-03, 1.1803612855040625e-02, 8.3324969783531780e-03, 2.3695126689747326e-03, -1.5874939943956356e-03,    -2.5619416124584822e-03,    -1.8185681242784432e-03,    -6.3046914864397922e-04};
 //float b[101]={  -4.1384865093955942e-18,    2.4158288163475484e-05, -1.3320677588450310e-04,    -2.1438469575543533e-04,    1.1898399936030848e-04, 5.3082205069710680e-04, 2.1893290271722703e-04, -7.4768481245699380e-04,    -9.5792023943993328e-04,    4.6168341621969679e-04, 1.8598657706234230e-03, 7.0670080707196015e-04, -2.2492456754091747e-03,    -2.7055293027965603e-03,    1.2307634272343665e-03, 4.6993269406780981e-03, 1.6984303126684232e-03, -5.1577427312871921e-03,    -5.9361687426490355e-03,    2.5904429699616822e-03, 9.5104864390879260e-03, 3.3122378905612003e-03, -9.7118714382866452e-03,    -1.0812123641265282e-02,    4.5715859206989177e-03, 1.6287321385412081e-02, 5.5122975619431172e-03, -1.5726675339333283e-02,    -1.7056081487002734e-02,    7.0329483752597077e-03, 2.4459678182842035e-02, 8.0882772704277336e-03, -2.2565290379886044e-02,    -2.3949227569375457e-02,    9.6706866781569138e-03, 3.2957303117234021e-02, 1.0685317933349465e-02, -2.9243552530078470e-02,    -3.0461077862757931e-02,    1.2077118105660343e-02, 4.0427773465971463e-02, 1.2879264031643200e-02, -3.4645501075422983e-02,    -3.5481182001261206e-02,    1.3834430631479126e-02, 4.5553192553114567e-02, 1.4277570256188015e-02, -3.7792491047513456e-02,    -3.8090059866479127e-02,    1.4617663668474229e-02, 4.7377897417654163e-02, 1.4617663668474229e-02, -3.8090059866479127e-02,    -3.7792491047513456e-02,    1.4277570256188015e-02, 4.5553192553114567e-02, 1.3834430631479126e-02, -3.5481182001261206e-02,    -3.4645501075422983e-02,    1.2879264031643200e-02, 4.0427773465971463e-02, 1.2077118105660343e-02, -3.0461077862757931e-02,    -2.9243552530078470e-02,    1.0685317933349465e-02, 3.2957303117234021e-02, 9.6706866781569138e-03, -2.3949227569375457e-02,    -2.2565290379886044e-02,    8.0882772704277336e-03, 2.4459678182842035e-02, 7.0329483752597077e-03, -1.7056081487002734e-02,    -1.5726675339333283e-02,    5.5122975619431172e-03, 1.6287321385412081e-02, 4.5715859206989177e-03, -1.0812123641265282e-02,    -9.7118714382866452e-03,    3.3122378905612003e-03, 9.5104864390879260e-03, 2.5904429699616822e-03, -5.9361687426490355e-03,    -5.1577427312871921e-03,    1.6984303126684232e-03, 4.6993269406780981e-03, 1.2307634272343665e-03, -2.7055293027965603e-03,    -2.2492456754091747e-03,    7.0670080707196015e-04, 1.8598657706234230e-03, 4.6168341621969679e-04, -9.5792023943993328e-04,    -7.4768481245699380e-04,    2.1893290271722703e-04, 5.3082205069710680e-04, 1.1898399936030848e-04, -2.1438469575543533e-04,    -1.3320677588450310e-04,    2.4158288163475484e-05, -4.1384865093955942e-18};
 uint16_t spibcount = 0;
@@ -223,7 +201,7 @@ float accelz_offset = 0;
 float gyrox_offset = 0;
 float gyroy_offset = 0;
 float gyroz_offset = 0;
-float accelzBalancePoint = -0.62;//-0.6 with battery, -0.75 with cable CHANGING POINT
+float accelzBalancePoint = -.6;
 int16 IMU_data[9];
 uint16_t temp=0;
 int16_t doneCal = 0;
@@ -254,214 +232,12 @@ float K2 = -4.5;
 float K3 = -1.1;
 float K4 = -0.1;
 
-// MIC
-#define MICARRAYSIZE 32  // define the order of the filter (ARRAYSIZE = order + 1)
-#define THRESHOLD 2.4    // Adjust this threshold value based on your requirements for sliding window filter
-#define AccelzFallOffPoint 1.7  // the accelz reading to control what pose the robot falls off
-__interrupt void ADCB_ISR(void); // RSM: setup interrupt to sample the mic's audio signal.
-float slidingWindowFilter(float* buffer, int bufferSize, float newValue); // sliding window filter
-int16_t adcb4result = 0; // EX4: define var for ADCINB4
-float adcinb4_volt = 0; // EX4: define var for scaled ADCINB4 volts
-//float b[32]={   -6.3046914864397922e-04,
-//                -1.8185681242784432e-03,
-//                -2.5619416124584822e-03,
-//                -1.5874939943956356e-03,
-//                2.3695126689747326e-03,
-//                8.3324969783531780e-03,
-//                1.1803612855040625e-02,
-//                6.7592967793297151e-03,
-//                -9.1745119977290398e-03,
-//                -2.9730906886035850e-02,
-//                -3.9816452266421651e-02,
-//                -2.2301647638687881e-02,
-//                3.1027965907247105e-02,
-//                1.1114350049251465e-01,
-//                1.9245540210070616e-01,
-//                2.4373020388648489e-01,
-//                2.4373020388648489e-01,
-//                1.9245540210070616e-01,
-//                1.1114350049251465e-01,
-//                3.1027965907247105e-02,
-//                -2.2301647638687881e-02,
-//                -3.9816452266421651e-02,
-//                -2.9730906886035850e-02,
-//                -9.1745119977290398e-03,
-//                6.7592967793297151e-03,
-//                1.1803612855040625e-02,
-//                8.3324969783531780e-03,
-//                2.3695126689747326e-03,
-//                -1.5874939943956356e-03,
-//                -2.5619416124584822e-03,
-//                -1.8185681242784432e-03,
-//                -6.3046914864397922e-04};   // MIC: B coefficients for the LPF for the 31st order with 500Hz cutoff frequency. comment out b[22] around line 237
-float b[129] = {-6.0933979972042703e-05,
-                2.2226831219301864e-04,
-                2.8974151743289524e-04,
-                -1.3900336442518001e-04,
-                -5.5205076998167347e-04,
-                -2.0605444171726273e-04,
-                6.4373996593722576e-04,
-                7.6039650412080867e-04,
-                -3.3991519940643227e-04,
-                -1.2759280021851316e-03,
-                -4.5331977234490541e-04,
-                1.3523627744666436e-03,
-                1.5270333531689838e-03,
-                -6.5249381959878920e-04,
-                -2.3395683232093761e-03,
-                -7.9317890216197508e-04,
-                2.2550618759676318e-03,
-                2.4229289326440791e-03,
-                -9.8328026046482810e-04,
-                -3.3405936546295379e-03,
-                -1.0698848343386564e-03,
-                2.8621174635235619e-03,
-                2.8783292855157874e-03,
-                -1.0854725875245326e-03,
-                -3.3925644021281722e-03,
-                -9.8508848027534950e-04,
-                2.3371958523421789e-03,
-                2.0118934373486649e-03,
-                -6.0968976641437181e-04,
-                -1.3396116407110663e-03,
-                -1.7915735910959221e-04,
-                -2.5274457120166952e-04,
-                -1.0853672517607649e-03,
-                7.7597712133169248e-04,
-                3.8228852107704612e-03,
-                1.6307564513192770e-03,
-                -5.5602720280016954e-03,
-                -6.9630356826812156e-03,
-                3.2367117297483761e-03,
-                1.2468656973230671e-02,
-                4.5060307109954512e-03,
-                -1.3594486452954113e-02,
-                -1.5470545953991000e-02,
-                6.6517057691880986e-03,
-                2.3997144771943577e-02,
-                8.1957094815928323e-03,
-                -2.3528048209876834e-02,
-                -2.5613486996940341e-02,
-                1.0579491680098030e-02,
-                3.6790315776064585e-02,
-                1.2145265253265586e-02,
-                -3.3779165367020428e-02,
-                -3.5694894642747728e-02,
-                1.4334305976936610e-02,
-                4.8530261188027703e-02,
-                1.5615555399187055e-02,
-                -4.2374092982100861e-02,
-                -4.3724547445498724e-02,
-                1.7158368219669051e-02,
-                5.6801150550068319e-02,
-                1.7880123153923431e-02,
-                -4.7486277179965466e-02,
-                -4.7973337468012973e-02,
-                1.8436509093443163e-02,
-                5.9783339421635107e-02,
-                1.8436509093443163e-02,
-                -4.7973337468012973e-02,
-                -4.7486277179965466e-02,
-                1.7880123153923431e-02,
-                5.6801150550068319e-02,
-                1.7158368219669051e-02,
-                -4.3724547445498724e-02,
-                -4.2374092982100861e-02,
-                1.5615555399187055e-02,
-                4.8530261188027703e-02,
-                1.4334305976936610e-02,
-                -3.5694894642747728e-02,
-                -3.3779165367020428e-02,
-                1.2145265253265586e-02,
-                3.6790315776064585e-02,
-                1.0579491680098030e-02,
-                -2.5613486996940341e-02,
-                -2.3528048209876834e-02,
-                8.1957094815928323e-03,
-                2.3997144771943577e-02,
-                6.6517057691880986e-03,
-                -1.5470545953991000e-02,
-                -1.3594486452954113e-02,
-                4.5060307109954512e-03,
-                1.2468656973230671e-02,
-                3.2367117297483761e-03,
-                -6.9630356826812156e-03,
-                -5.5602720280016954e-03,
-                1.6307564513192770e-03,
-                3.8228852107704612e-03,
-                7.7597712133169248e-04,
-                -1.0853672517607649e-03,
-                -2.5274457120166952e-04,
-                -1.7915735910959221e-04,
-                -1.3396116407110663e-03,
-                -6.0968976641437181e-04,
-                2.0118934373486649e-03,
-                2.3371958523421789e-03,
-                -9.8508848027534950e-04,
-                -3.3925644021281722e-03,
-                -1.0854725875245326e-03,
-                2.8783292855157874e-03,
-                2.8621174635235619e-03,
-                -1.0698848343386564e-03,
-                -3.3405936546295379e-03,
-                -9.8328026046482810e-04,
-                2.4229289326440791e-03,
-                2.2550618759676318e-03,
-                -7.9317890216197508e-04,
-                -2.3395683232093761e-03,
-                -6.5249381959878920e-04,
-                1.5270333531689838e-03,
-                1.3523627744666436e-03,
-                -4.5331977234490541e-04,
-                -1.2759280021851316e-03,
-                -3.3991519940643227e-04,
-                7.6039650412080867e-04,
-                6.4373996593722576e-04,
-                -2.0605444171726273e-04,
-                -5.5205076998167347e-04,
-                -1.3900336442518001e-04,
-                2.8974151743289524e-04,
-                2.2226831219301864e-04,
-                -6.0933979972042703e-05}; // RSM-EX4: B coefficients for the 128th order bandpass filter we designed
-float xarray_ADCB4[MICARRAYSIZE] = {0}; // MIC: create an x array
-float micReadingBuffer[30]; // Sliding window buffer for microphone readings
-float micReadingMax = 0;
-float micReadingMin = 0;
-float deltaMicReading = 0;
-float micReading = 0;
-float MicLPFThreshold = 12;
-float yk_ADCB4 = 0;
-int16_t state_scared = 0;
-//float accelzBalancePoint = 0.6;
-void setDACA(float dacouta0) {
-    int16_t DACOutInt = 0;
-    DACOutInt = dacouta0/3.0*4096.0; // EX1: conversion. perform scaling of 0 – almost 3V to 0 - 4095
-    if (DACOutInt > 4095) DACOutInt = 4095;
-    if (DACOutInt < 0) DACOutInt = 0;
-    DacaRegs.DACVALS.bit.DACVALS = DACOutInt;
-}
-void setDACB(float dacouta1) {
-    int16_t DACOutInt = 0;
-    DACOutInt = dacouta1/3.0*4096.0; // EX1: conversion. perform scaling of 0 – almost 3V to 0 - 4095
-    if (DACOutInt > 4095) DACOutInt = 4095;
-    if (DACOutInt < 0) DACOutInt = 0;
-    DacbRegs.DACVALS.bit.DACVALS = DACOutInt;
-}
-
-//FOR STATE MACHINE
-uint16_t state = 1;//0 is driving, 1 is balancing, 2 is getting back up
-
 void main(void)
 {
     // PLL, WatchDog, enable Peripheral Clocks
     // This example function is found in the F2837xD_SysCtrl.c file.
     InitSysCtrl();
     InitGpio();
-
-    // MIC
-    GPIO_SetupPinMux(52, GPIO_MUX_CPU1, 0);
-    GPIO_SetupPinOptions(52, GPIO_OUTPUT, GPIO_PUSHPULL);
-    GpioDataRegs.GPBCLEAR.bit.GPIO52 = 1;
 
     // Blue LED on LaunchPad
     GPIO_SetupPinMux(31, GPIO_MUX_CPU1, 0);
@@ -654,7 +430,6 @@ void main(void)
     PieVectTable.EMIF_ERROR_INT = &SWI_isr;
     PieVectTable.ADCA1_INT = &ADCA_ISR;
     PieVectTable.SPIB_RX_INT = &SPIB_isr; //map interrupt to SPB interrupt function
-    PieVectTable.ADCB1_INT = &ADCB_ISR; // MIC: assign ADCB1 to the PieVectTable
     EDIS;    // This is needed to disable write to EALLOW protected registers
 
 
@@ -696,27 +471,6 @@ void main(void)
     GPIO_SetupPinMux(2, GPIO_MUX_CPU1, 1); //2A
     GPIO_SetupPinMux(3, GPIO_MUX_CPU1, 1); //2B
     init_serialSCIA(&SerialA,115200);
-
-    // Setting up EPWM8 signal for self righting servos
-    EPwm8Regs.TBCTL.bit.CTRMODE = 0 ;
-    EPwm8Regs.TBCTL.bit.FREE_SOFT = 2;
-    EPwm8Regs.TBCTL.bit.PHSEN = 0;
-    EPwm8Regs.TBCTL.bit.CLKDIV = 4;
-    EPwm8Regs.TBCTR = 0;
-    EPwm8Regs.TBPRD = 62500;
-    EPwm8Regs.CMPA.bit.CMPA = 0;
-    EPwm8Regs.CMPB.bit.CMPB = 0;
-    EPwm8Regs.AQCTLA.bit.CAU = 1;
-    EPwm8Regs.AQCTLA.bit.ZRO = 2;
-    EPwm8Regs.AQCTLB.bit.CBU = 1;
-    EPwm8Regs.AQCTLB.bit.ZRO = 2;
-    EPwm8Regs.TBPHS.bit.TBPHS = 0;
-    //setting up pin EPWM8A/B
-    GPIO_SetupPinMux(14, GPIO_MUX_CPU1, 1);
-    GPIO_SetupPinMux(15, GPIO_MUX_CPU1, 1);
-
-
-
     //-----------------------------------------ADCA intializations AMBSCK -----------------
     //copy from lab 4
     EALLOW;
@@ -794,17 +548,6 @@ void main(void)
     AdcdRegs.ADCINTSEL1N2.bit.INT1E = 1; //enable INT1 flag
     AdcdRegs.ADCINTFLGCLR.bit.ADCINT1 = 1; //make sure INT1 flag is cleared
     EDIS;
-
-    // MIC: Enable DACA and DACB outputs
-    EALLOW;
-    DacaRegs.DACOUTEN.bit.DACOUTEN = 1; //enable dacA output-->uses ADCINA0
-    DacaRegs.DACCTL.bit.LOADMODE = 0; //load on next sysclk
-    DacaRegs.DACCTL.bit.DACREFSEL = 1; //use ADC VREF as reference voltage
-    DacbRegs.DACOUTEN.bit.DACOUTEN = 1; //enable dacB output-->uses ADCINA1
-    DacbRegs.DACCTL.bit.LOADMODE = 0; //load on next sysclk
-    DacbRegs.DACCTL.bit.DACREFSEL = 1; //use ADC VREF as reference voltage
-    EDIS;
-
     //--------------------------------AMBSCK EPWM5 Initializations--------------------
     //copied from lab 4
     EALLOW;
@@ -878,7 +621,7 @@ void main(void)
     IER |= M_INT12;
     IER |= M_INT13;
     IER |= M_INT14;
-    IER |= M_INT2; // MIC: enable 2nd interrupt source of interrupt 1 for microphone
+
 
     // Enable TINT0 in the PIE: Group 1 interrupt 7
     PieCtrlRegs.PIEIER1.bit.INTx7 = 1;
@@ -888,10 +631,8 @@ void main(void)
     PieCtrlRegs.PIEIER6.bit.INTx3 = 1;
     //AMBSCK enable adca group 1 interrupt 1
     PieCtrlRegs.PIEIER1.bit.INTx1 = 1;
-    // MIC: enable TINT0 in the PIE: Group 1 interrupt 2 for ADCB1
-    PieCtrlRegs.PIEIER1.bit.INTx2 = 1;
 
-    //    init_serialSCIB(&SerialB,115200);
+    init_serialSCIB(&SerialB,115200);
     init_serialSCIC(&SerialC,115200);
     init_serialSCID(&SerialD,115200);
     setupSpib();
@@ -902,9 +643,6 @@ void main(void)
     ERTM;  // Enable Global realtime interrupt DBGM
     // IDLE loop. Just sit and loop forever (optional):
     // IDLE loop. Just sit and loop forever (optional):
-    setEPWM8B_RCServo(leftAngleState1);
-    setEPWM8A_RCServo(rightAngleState1);
-
     while(1)
     {
         if (UARTPrint == 1 ) {
@@ -924,6 +662,7 @@ void main(void)
 
 // SWI_isr,  Using this interrupt as a Software started interrupt
 __interrupt void SWI_isr(void) {
+
     // These three lines of code allow SWI_isr, to be interrupted by other interrupt functions
     // making it lower priority than all other Hardware interrupts.
     PieCtrlRegs.PIEACK.all = PIEACK_GROUP12;
@@ -932,200 +671,85 @@ __interrupt void SWI_isr(void) {
 
 
     // Insert SWI ISR Code here.......
-    //WHEEL SPEEDS AND DISTANCES
     //calculate rates using derivative approximation
 
-    vel_left = 0.6*vel_left_1 + 100.0*(LeftWheel-LeftWheel_1);//wheel speed left
+    vel_left = 0.6*vel_left_1 + 100.0*(LeftWheel-LeftWheel_1);
 
 
-    vel_right = 0.6*vel_right_1 + 100.0*(RightWheel-RightWheel_1);//wheel speed right
+    vel_right = 0.6*vel_right_1 + 100.0*(RightWheel-RightWheel_1);
 
 
     gyro_rate = 0.6*gyro_rate_1 + 100.0*(gyro_value-gyro_value_1);
 
-    WhlDiff = LeftWheel-RightWheel;//dtheta between wheels
-    vel_WhlDiff = 0.3333 * vel_WhlDiff_1 + 166.6667 * (WhlDiff - WhlDiff_1);//dtheta dot between wheels
-    if(state==1){
+    WhlDiff = LeftWheel-RightWheel;
+    vel_WhlDiff = 0.3333 * vel_WhlDiff_1 + 166.6667 * (WhlDiff - WhlDiff_1);
 
-        //BALANCING CONTROL
-        //AMBSCK calculate control law using rates
-        //speed conrol law AMBSCK
-        if (coolDown == 0) {
-            setEPWM8B_RCServo(leftAngleState1);
-            setEPWM8A_RCServo(rightAngleState1);
-        }
+    //AMBSCK calculate control law using rates
+    //speed conrol law AMBSCK
+    eSpeed = (refSpeed - (vel_left+vel_right)/2.0);
 
-        if (numTimer1calls >= coolDownTime) {
-            coolDown = 0;
-        }
+    turnref = turnref + 0.5*(turnRate+turnRate_1)*0.004;
+    errorDiff = turnref - WhlDiff;
+    if(fabs(turn)>=3.0){
+        //errorInt = errorInt; do nothing
+    }
+    else{
+        errorInt = errorInt + 0.5*(errorDiff+errorDiff_1)*0.004;//AMBSCK in lab day 2 come back and check this and variable definitions
+    }
 
-        eSpeed = (refSpeed - (vel_left+vel_right)/2.0);
+    if(fabs(uspd)>=3){
 
-        turnref = turnref + 0.5*(turnRate+turnRate_1)*0.004;
-        errorDiff = turnref - WhlDiff;
-        if(fabs(turn)>=3.0){
-            //errorInt = errorInt; do nothing
+    }
+    else{
+        intSpeed = intSpeed + 0.5*(eSpeed+eSpeed_1)*0.004;
+    }
+    ubal = -K1 * tilt_value - K2 * gyro_value - K3 * (vel_left + vel_right) / 2.0 - K4 * gyro_rate;
+    uspd = Kp_s * eSpeed + Ki_s * intSpeed;
+    //AMBSCK PID control for turn command'
+    turn = Kp*errorDiff + Ki*errorInt -Kd*vel_WhlDiff;
+    if(fabs(turn)>=4.0){
+        if(turn<0){
+            turn = -4.0;
         }
         else{
-            errorInt = errorInt + 0.5*(errorDiff+errorDiff_1)*0.004;//AMBSCK in lab day 2 come back and check this and variable definitions
+            turn = 4.0;
         }
-
-        if(fabs(uspd)>=3){
-
+    }
+    if(fabs(uspd)>=4.0){
+        if(uspd<0){
+            uspd = -4.0;
         }
         else{
-            intSpeed = intSpeed + 0.5*(eSpeed+eSpeed_1)*0.004;
+            uspd = 4.0;
         }
-        ubal = -K1 * tilt_value - K2 * gyro_value - K3 * (vel_left + vel_right) / 2.0 - K4 * gyro_rate;
-        uspd = Kp_s * eSpeed + Ki_s * intSpeed;
-        //AMBSCK PID control for turn command'
-        turn = Kp*errorDiff + Ki*errorInt -Kd*vel_WhlDiff;
-        if(fabs(turn)>=4.0){
-            if(turn<0){
-                turn = -4.0;
-            }
-            else{
-                turn = 4.0;
-            }
-        }
-        if(fabs(uspd)>=4.0){
-            if(uspd<0){
-                uspd = -4.0;
-            }
-            else{
-                uspd = 4.0;
-            }
-        }
-        //AMBSCK calculate control effort
-        uLeft = ubal / 2.0 + turn - uspd;
-        uRight = ubal / 2.0 - turn - uspd;
-
-        //AMBSCK write to EPWM2 to control motors
-        setEPWM2A(uRight);//AMBSCK 2A commands right side`
-        setEPWM2B(-uLeft);
-
-        numSWIcalls++;
-
-        vel_left_1 = vel_left;
-        vel_right_1 = vel_right;
-        gyro_rate_1 = gyro_rate;
-        LeftWheel_1 = LeftWheel;
-        RightWheel_1 = RightWheel;
-        gyro_value_1 = gyro_value;
-        WhlDiff_1 = WhlDiff;
-        vel_WhlDiff_1 = vel_WhlDiff;
-        errorDiff_1 = errorDiff;
-        errorInt_1 = errorInt;
-
-        turnRate_1 = turnRate;
-        turnref_1 = turnref;
-
-        eSpeed_1 = eSpeed;
-        intSpeed_1 = intSpeed;
-    }
-    else if(state==0){
-        setEPWM8B_RCServo(leftAngleState1);
-        setEPWM8A_RCServo(rightAngleState1);
-        deltaMicReading = 0;
-        micReadingMax = 0;
-        micReadingMin = 0;
-        stopped = 0;
-        //driving control code
-        if(firstRun == 1){//SCK first time through the loop, save the current time
-            Vref = 0.1;//drive this fast at the start
-            startCycle = numTimer1calls;//SCK this is when we started driving, compare to current time to know when to stop.
-            firstRun = 0;
-        }
-        if(firstRun == 0){//if it's not the first time through the cycle
-            if(stopped == 0){//if the robot hasn't reached stop time
-                if(startCycle+1250 - numTimer1calls < 100){//check if it is stop time
-                    //SCK 1250 is how many cycles of timer 1 (period 4000us) this equates to 5 seconds of driving.
-                    Vref = 0;//stop driving
-                    stopped = 1;//don't do anything else
-                    setEPWM2A(0);//AMBSCK 2A commands right side`
-                    setEPWM2B(0);
-                    firstRun = 1;
-                    state = 2;
-                }
-            }
-        }
-
-        if(stopped == 0){//SCK if the robot is not stopped, run control laws to drive, turn, and avoid walls. Use vref for speed, turn for turn, tune avoidance with Kpwall and tune how long with the constant in the loop above.
-            leftAngle = readEncLeft();
-            rightAngle = readEncRight();
-
-            leftOmega = (leftAngle-leftAngle_1)/0.004;
-            rightOmega = (rightAngle-rightAngle_1)/0.004;
-            leftAngle_1 = leftAngle;
-            rightAngle_1 = rightAngle;
-            //AMBSCK store previous values of distance
-            leftDist_1 = leftDist;
-            rightDist_1 = rightDist;
-
-            leftDist = leftAngle/5.1;//AMBSCK convert angle in rad to distance in ft
-            rightDist = rightAngle/5.1;
-            //AMBSCK calculate velocity
-            leftVel = (leftDist - leftDist_1)/0.004;
-            rightVel = (rightDist - rightDist_1)/0.004;
-
-            omegaAvg = 0.5*(leftOmega+rightOmega);
-            phi = (Rwh/Wr)*(rightAngle-leftAngle);
-            velX = Rwh*omegaAvg*cos(phi);
-            velY = Rwh*omegaAvg*sin(phi);
-            poseX = poseX + 0.5*(velX+velX_1)*0.004;
-            poseY = poseY + 0.5*(velY+velY_1)*0.004;
-            velX_1 = velX;
-            velY_1 = velY;
-            //calculate turn control law
-            eturn = turn_0 + leftVel - rightVel;
-            //calculate wall avoidance control law
-            ewall = joyxk[0]-joyyk[0]; //if the wall is closer then the joy reading is higher. turn=L-R so left should increase turn and right should decrease it.
-            //assume x is left, y is right... add this to left and subtract from right
-            //calculate control law AMBSCK
-            e_L = Vref-leftVel - Kpturn*eturn + Kpwall*ewall;
-            I_L=I_1_L+0.004*(e_L+e_1_L);
-            uLeft = Kp_d*e_L+Ki_d*I_L;
-            if(abs(uLeft) >= 10.0){
-                I_L=I_1_L;
-            }//prevent integral windup
-            //save past states AMBSCK
-            e_1_L = e_L;
-            I_1_L = I_L;
-
-            //calculate control law AMBSCK
-            e_R = Vref-rightVel + Kpturn*eturn - Kpwall*ewall;
-            I_R=I_1_R+0.004*(e_R+e_1_R);
-            uRight = Kp_d*e_R+Ki_d*I_R;
-            if(abs(uRight) >= 10.0){
-                I_R=I_1_R;
-            }//prevent integral windup
-            //save past states AMBSCK
-            e_1_R = e_R;
-            I_1_R = I_R;
-
-
-            setEPWM2A(uRight);//AMBSCK 2A commands right side`
-            setEPWM2B(-uLeft);
-
-
-        }
-
-    }
-    else if (state==2){
-        coolDown = 1;
-        setEPWM8B_RCServo(leftAngleState2);
-        setEPWM8A_RCServo(rightAngleState2);
-        //        state = 1;
-        deltaMicReading = 0;
-        micReadingMax = 0;
-        micReadingMin = 0;
-        hunch++;
-        coolDownTime = numTimer1calls + 2000;
-        state = 1;
     }
 
+    //AMBSCK calculate control effort
+    uLeft = ubal / 2.0 + turn - uspd;
+    uRight = ubal / 2.0 - turn - uspd;
 
+    //AMBSCK write to EPWM2 to control motors
+    setEPWM2A(uRight);//AMBSCK 2A commands right side`
+    setEPWM2B(-uLeft);
 
+    numSWIcalls++;
+
+    vel_left_1 = vel_left;
+    vel_right_1 = vel_right;
+    gyro_rate_1 = gyro_rate;
+    LeftWheel_1 = LeftWheel;
+    RightWheel_1 = RightWheel;
+    gyro_value_1 = gyro_value;
+    WhlDiff_1 = WhlDiff;
+    vel_WhlDiff_1 = vel_WhlDiff;
+    errorDiff_1 = errorDiff;
+    errorInt_1 = errorInt;
+
+    turnRate_1 = turnRate;
+    turnref_1 = turnref;
+
+    eSpeed_1 = eSpeed;
+    intSpeed_1 = intSpeed;
 
     DINT;
 
@@ -1162,8 +786,8 @@ __interrupt void SWI_isr(void) {
         }
         serial_sendSCID(&SerialD, LVsenddata, 4*LVNUM_TOFROM_FLOATS + 2);
     }
-}
 
+}
 
 // cpu_timer0_isr - CPU Timer0 ISR
 __interrupt void cpu_timer0_isr(void)
@@ -1236,6 +860,61 @@ __interrupt void cpu_timer0_isr(void)
 __interrupt void cpu_timer1_isr(void)
 {
     numTimer1calls++;
+    /*
+    leftAngle = readEncLeft();
+    rightAngle = readEncRight();
+
+    leftOmega = (leftAngle-leftAngle_1)/0.004;
+    rightOmega = (rightAngle-rightAngle_1)/0.004;
+    leftAngle_1 = leftAngle;
+    rightAngle_1 = rightAngle;
+    //AMBSCK store previous values of distance
+    leftDist_1 = leftDist;
+    rightDist_1 = rightDist;
+
+    leftDist = leftAngle/5.1;//AMBSCK convert angle in rad to distance in ft
+    rightDist = rightAngle/5.1;
+    //AMBSCK calculate velocity
+    leftVel = (leftDist - leftDist_1)/0.004;
+    rightVel = (rightDist - rightDist_1)/0.004;
+
+    omegaAvg = 0.5*(leftOmega+rightOmega);
+    phi = (Rwh/Wr)*(rightAngle-leftAngle);
+    velX = Rwh*omegaAvg*cos(phi);
+    velY = Rwh*omegaAvg*sin(phi);
+    poseX = poseX + 0.5*(velX+velX_1)*0.004;
+    poseY = poseY + 0.5*(velY+velY_1)*0.004;
+    velX_1 = velX;
+    velY_1 = velY;
+    //calculate turn control law
+    eturn = turn + leftVel - rightVel;
+
+    //calculate control law AMBSCK
+    e_L = Vref-leftVel - Kpturn*eturn;
+    I_L=I_1_L+0.004*(e_L+e_1_L);
+    uLeft = Kp*e_L+Ki*I_L;
+    if(abs(uLeft) >= 10.0){
+        I_L=I_1_L;
+    }//prevent integral windup
+    //save past states AMBSCK
+    e_1_L = e_L;
+    I_1_L = I_L;
+
+    //calculate control law AMBSCK
+    e_R = Vref-rightVel + Kpturn*eturn;
+    I_R=I_1_R+0.004*(e_R+e_1_R);
+    uRight = Kp*e_R+Ki*I_R;
+    if(abs(uRight) >= 10.0){
+        I_R=I_1_R;
+    }//prevent integral windup
+    //save past states AMBSCK
+    e_1_R = e_R;
+    I_1_R = I_R;
+
+
+    setEPWM2A(uRight);//AMBSCK 2A commands right side`
+    setEPWM2B(-uLeft);
+     */
 
     CpuTimer1.InterruptCount++;
 }
@@ -1285,14 +964,6 @@ __interrupt void SPIB_isr(void) {
     gyrox = gxr*250.0/32767.0;
     gyroy = gyr*250.0/32767.0;
     gyroz = gzr*250.0/32767.0;
-
-    // MIC: use to control the segbot self-balancing point
-    if (state_scared == 1) {
-        //        accelzBalancePoint = AccelzFallOffPoint;
-    }
-    else if (state_scared == 0) {
-        //        accelzBalancePoint = 0.6;
-    }
     //AMBSCK copy kalman filter code
     if(calibration_state == 0){
         calibration_count++;
@@ -1654,7 +1325,6 @@ void setEPWM2B(float uRight){
     EPwm2Regs.CMPB.bit.CMPB=(uRight/20.0)*2500.0;
 }
 //AMBSCK ADCA interrupt function to sample joystick
-//sck edited function to sample ADCA2 and 3 as IR distance sensor readings. Inverts voltage.
 __interrupt void ADCA_ISR (void) {
     numADCacalls++;
     adca2result = AdcaResultRegs.ADCRESULT0;
@@ -1662,8 +1332,8 @@ __interrupt void ADCA_ISR (void) {
     adcina2v=0;
     adcina3v=0;
     // Here covert ADCINA2 to volts
-    joyxk[0] = adca2result/4096.0*5.3;
-    joyyk[0] = adca3result/4096.0*5.3;
+    joyxk[0] = adca2result/4096.0*3.0;
+    joyyk[0] = adca3result/4096.0*3.0;
     //AMBSCK start SPI transmission and reception of acc and gyro
     GpioDataRegs.GPCCLEAR.bit.GPIO66 = 1;
     SpibRegs.SPIFFRX.bit.RXFFIL = 8;
@@ -1693,131 +1363,9 @@ __interrupt void ADCA_ISR (void) {
     if((numADCacalls%100)==0){
         UARTPrint = 1;
     }
-     */
+    */
     // Print ADCIND0’s voltage value to TeraTerm every 100ms
     AdcaRegs.ADCINTFLGCLR.bit.ADCINT1 = 1; //clear interrupt flag
     PieCtrlRegs.PIEACK.all = PIEACK_GROUP1;
-
-}
-
-// MIC
-// Function to implement sliding window filter
-float slidingWindowFilter(float* buffer, int bufferSize, float newValue)
-{
-    //    micReadingMax = max(newValue, micReadingMax);
-    // MIC: always get the max mic reading
-    if (newValue > micReadingMax) {
-        micReadingMax = newValue;
-    }
-    if (newValue < micReadingMin) {
-        micReadingMin = newValue;
-    }
-    deltaMicReading = micReadingMax - micReadingMin;
-
-    // Shift elements in the buffer
-    for (int i = bufferSize - 1; i > 0; --i)
-    {
-        buffer[i] = buffer[i - 1];
-    }
-
-    // Insert the new value at the beginning of the buffer
-    buffer[0] = newValue;
-
-    // Calculate the average of the buffer
-    float sum = 0;
-    for (int i = 0; i < bufferSize; ++i)
-    {
-        sum += buffer[i];
-    }
-
-    return sum / bufferSize;
-}
-
-
-
-
-
-// MIC
-// adcb1 pie interrupt
-__interrupt void ADCB_ISR (void) {
-    GpioDataRegs.GPBSET.bit.GPIO52 = 1;
-
-    adcb4result = AdcbResultRegs.ADCRESULT0;
-
-    adcinb4_volt = adcb4result*3.0/4096.0; // Here covert ADCINB4 to volts
-
-
-    // MIC: low pass filter  RSM-EX3.
-    xarray_ADCB4[0] = adcinb4_volt; // Update the newest input value
-
-    yk_ADCB4 = 0.0; // Calculate the filter output yk
-    for (int k = 0; k < ARRAYSIZE; k++) {
-        yk_ADCB4 += b[k] * xarray_ADCB4[k];
-    }
-
-    for (int k = ARRAYSIZE-1; k > 0; k--) {
-        xarray_ADCB4[k] = xarray_ADCB4[k-1];
-    }
-    //    //    setDACA(adcinb4_volt); // Here write yk to DACB channel
-    //    setDACA(yk_ADCB4 + 1.5);
-    setDACA(adcinb4_volt);
-
-    // MIC: sliding window filter
-    //    micReading = slidingWindowFilter(micReadingBuffer, sizeof(micReadingBuffer) / sizeof(micReadingBuffer[0]), adcinb4_volt);
-//    micReading = slidingWindowFilter(micReadingBuffer, sizeof(micReadingBuffer) / sizeof(micReadingBuffer[0]), yk_ADCB4);
-    micReading = slidingWindowFilter(micReadingBuffer, 30, yk_ADCB4);
-
-    // change "deltaMicReading" to "yk_ADCB4"
-    // "THRESHOLD" to "MicLPFThreshold"
-    if (micReading > MicLPFThreshold) {
-        state_scared = 1;
-        state = 0;
-        //        setEPWM2A(0);  // MIC: immediately stop the robot
-        //        setEPWM2B(0);  // MIC: immediately stop the robot
-
-    }
-    else {
-        // do nothing
-        // state_scared = 0; // if the robot is not scared
-    }
-
-
-    // Print ADCIND0 and ADCIND1’s voltage value to TeraTerm every 100ms
-    if ((CpuTimer2.InterruptCount % 100) == 0) {
-        UARTPrint = 1;
-    }
-
-    AdcbRegs.ADCINTFLGCLR.bit.ADCINT1 = 1; //clear interrupt flag
-    PieCtrlRegs.PIEACK.all = PIEACK_GROUP1;
-    GpioDataRegs.GPBCLEAR.bit.GPIO52 = 1;
-}
-
-
-// DVG creating RC Servo angle for A
-void setEPWM8A_RCServo(float angle) {
-
-    if (angle > 97) {
-        angle = 97;
-    } else if (angle < -35) {
-        angle = -35;
-    }
-
-    //    DVG Using the same approach as before with the motor, the CMPA is altered so that the duty cycle corresponds to the effort we wish to see exerted.
-    //    This is done by treating the 8% duty cycle as a 0 degree angle and 12% duty cycle as a 90 degree angle. Both those points are used to create a linear
-    //    relationship that is used to calculate value needed for CMPA to match the desired duty and angle. Same approach for motor B.
-    EPwm8Regs.CMPA.bit.CMPA = (0.08 * EPwm8Regs.TBPRD) + 0.04 * EPwm8Regs.TBPRD * angle / 90;
-
-}
-
-// DVG creating RC Servo angle for B
-void setEPWM8B_RCServo(float angle) {
-
-    if (angle > 20) {
-        angle = 20;
-    } else if (angle < -99) {
-        angle = -99;
-    }
-
-    EPwm8Regs.CMPB.bit.CMPB = (0.08 * EPwm8Regs.TBPRD) + 0.04 * EPwm8Regs.TBPRD * angle / 90;
 
 }

@@ -92,8 +92,9 @@ float Kd = 0.08;//BALANCING SCK
 float Kp_d = 3.0; //driving sck
 float Ki_d = 5.0; //driving sck
 
-float Vref = 0.0;
+float Vref = 0;
 float turn = 0.0;
+float turn_0 = 0.0;
 float Kpturn = 3.0;
 float eturn = 0.0;
 float Kpwall = 6.0;
@@ -132,6 +133,8 @@ int16_t spivalue3 = 0.0;
 int16_t pwmcmd1 = 0;
 int16_t pwmcmd2 = 0;
 int16_t upcount = 1;
+int16_t coolDown= 1; // responsible for delay after switching from state 2 to state 1
+int32_t coolDownTime; // responsible for timing the delay based on numTimer1Calls
 float v1 = 0.0;
 float v2 = 0.0;
 
@@ -202,7 +205,7 @@ float xk_4 = 0;
 float yk = 0;
 //b is the filter coefficients
 //float b[5] = {0.2,0.2,0.2,0.2,0.2}; // 0.2 is 1/5th therefore a 5 point average
-#define ARRAYSIZE 22
+#define ARRAYSIZE 129
 float xk[ARRAYSIZE]={0};
 float joyxk[ARRAYSIZE]={0};
 float joyyk[ARRAYSIZE]={0};
@@ -220,7 +223,7 @@ float accelz_offset = 0;
 float gyrox_offset = 0;
 float gyroy_offset = 0;
 float gyroz_offset = 0;
-float accelzBalancePoint = -0.5;//-0.6 with battery, -0.75 with cable
+float accelzBalancePoint = -0.62;//-0.6 with battery, -0.75 with cable CHANGING POINT
 int16 IMU_data[9];
 uint16_t temp=0;
 int16_t doneCal = 0;
@@ -259,44 +262,175 @@ __interrupt void ADCB_ISR(void); // RSM: setup interrupt to sample the mic's aud
 float slidingWindowFilter(float* buffer, int bufferSize, float newValue); // sliding window filter
 int16_t adcb4result = 0; // EX4: define var for ADCINB4
 float adcinb4_volt = 0; // EX4: define var for scaled ADCINB4 volts
-float b[32]={   -6.3046914864397922e-04,
-                -1.8185681242784432e-03,
-                -2.5619416124584822e-03,
-                -1.5874939943956356e-03,
-                2.3695126689747326e-03,
-                8.3324969783531780e-03,
-                1.1803612855040625e-02,
-                6.7592967793297151e-03,
-                -9.1745119977290398e-03,
-                -2.9730906886035850e-02,
-                -3.9816452266421651e-02,
-                -2.2301647638687881e-02,
-                3.1027965907247105e-02,
-                1.1114350049251465e-01,
-                1.9245540210070616e-01,
-                2.4373020388648489e-01,
-                2.4373020388648489e-01,
-                1.9245540210070616e-01,
-                1.1114350049251465e-01,
-                3.1027965907247105e-02,
-                -2.2301647638687881e-02,
-                -3.9816452266421651e-02,
-                -2.9730906886035850e-02,
-                -9.1745119977290398e-03,
-                6.7592967793297151e-03,
-                1.1803612855040625e-02,
-                8.3324969783531780e-03,
-                2.3695126689747326e-03,
-                -1.5874939943956356e-03,
-                -2.5619416124584822e-03,
-                -1.8185681242784432e-03,
-                -6.3046914864397922e-04};   // MIC: B coefficients for the LPF for the 31st order with 500Hz cutoff frequency. comment out b[22] around line 237
+//float b[32]={   -6.3046914864397922e-04,
+//                -1.8185681242784432e-03,
+//                -2.5619416124584822e-03,
+//                -1.5874939943956356e-03,
+//                2.3695126689747326e-03,
+//                8.3324969783531780e-03,
+//                1.1803612855040625e-02,
+//                6.7592967793297151e-03,
+//                -9.1745119977290398e-03,
+//                -2.9730906886035850e-02,
+//                -3.9816452266421651e-02,
+//                -2.2301647638687881e-02,
+//                3.1027965907247105e-02,
+//                1.1114350049251465e-01,
+//                1.9245540210070616e-01,
+//                2.4373020388648489e-01,
+//                2.4373020388648489e-01,
+//                1.9245540210070616e-01,
+//                1.1114350049251465e-01,
+//                3.1027965907247105e-02,
+//                -2.2301647638687881e-02,
+//                -3.9816452266421651e-02,
+//                -2.9730906886035850e-02,
+//                -9.1745119977290398e-03,
+//                6.7592967793297151e-03,
+//                1.1803612855040625e-02,
+//                8.3324969783531780e-03,
+//                2.3695126689747326e-03,
+//                -1.5874939943956356e-03,
+//                -2.5619416124584822e-03,
+//                -1.8185681242784432e-03,
+//                -6.3046914864397922e-04};   // MIC: B coefficients for the LPF for the 31st order with 500Hz cutoff frequency. comment out b[22] around line 237
+float b[129] = {-6.0933979972042703e-05,
+                2.2226831219301864e-04,
+                2.8974151743289524e-04,
+                -1.3900336442518001e-04,
+                -5.5205076998167347e-04,
+                -2.0605444171726273e-04,
+                6.4373996593722576e-04,
+                7.6039650412080867e-04,
+                -3.3991519940643227e-04,
+                -1.2759280021851316e-03,
+                -4.5331977234490541e-04,
+                1.3523627744666436e-03,
+                1.5270333531689838e-03,
+                -6.5249381959878920e-04,
+                -2.3395683232093761e-03,
+                -7.9317890216197508e-04,
+                2.2550618759676318e-03,
+                2.4229289326440791e-03,
+                -9.8328026046482810e-04,
+                -3.3405936546295379e-03,
+                -1.0698848343386564e-03,
+                2.8621174635235619e-03,
+                2.8783292855157874e-03,
+                -1.0854725875245326e-03,
+                -3.3925644021281722e-03,
+                -9.8508848027534950e-04,
+                2.3371958523421789e-03,
+                2.0118934373486649e-03,
+                -6.0968976641437181e-04,
+                -1.3396116407110663e-03,
+                -1.7915735910959221e-04,
+                -2.5274457120166952e-04,
+                -1.0853672517607649e-03,
+                7.7597712133169248e-04,
+                3.8228852107704612e-03,
+                1.6307564513192770e-03,
+                -5.5602720280016954e-03,
+                -6.9630356826812156e-03,
+                3.2367117297483761e-03,
+                1.2468656973230671e-02,
+                4.5060307109954512e-03,
+                -1.3594486452954113e-02,
+                -1.5470545953991000e-02,
+                6.6517057691880986e-03,
+                2.3997144771943577e-02,
+                8.1957094815928323e-03,
+                -2.3528048209876834e-02,
+                -2.5613486996940341e-02,
+                1.0579491680098030e-02,
+                3.6790315776064585e-02,
+                1.2145265253265586e-02,
+                -3.3779165367020428e-02,
+                -3.5694894642747728e-02,
+                1.4334305976936610e-02,
+                4.8530261188027703e-02,
+                1.5615555399187055e-02,
+                -4.2374092982100861e-02,
+                -4.3724547445498724e-02,
+                1.7158368219669051e-02,
+                5.6801150550068319e-02,
+                1.7880123153923431e-02,
+                -4.7486277179965466e-02,
+                -4.7973337468012973e-02,
+                1.8436509093443163e-02,
+                5.9783339421635107e-02,
+                1.8436509093443163e-02,
+                -4.7973337468012973e-02,
+                -4.7486277179965466e-02,
+                1.7880123153923431e-02,
+                5.6801150550068319e-02,
+                1.7158368219669051e-02,
+                -4.3724547445498724e-02,
+                -4.2374092982100861e-02,
+                1.5615555399187055e-02,
+                4.8530261188027703e-02,
+                1.4334305976936610e-02,
+                -3.5694894642747728e-02,
+                -3.3779165367020428e-02,
+                1.2145265253265586e-02,
+                3.6790315776064585e-02,
+                1.0579491680098030e-02,
+                -2.5613486996940341e-02,
+                -2.3528048209876834e-02,
+                8.1957094815928323e-03,
+                2.3997144771943577e-02,
+                6.6517057691880986e-03,
+                -1.5470545953991000e-02,
+                -1.3594486452954113e-02,
+                4.5060307109954512e-03,
+                1.2468656973230671e-02,
+                3.2367117297483761e-03,
+                -6.9630356826812156e-03,
+                -5.5602720280016954e-03,
+                1.6307564513192770e-03,
+                3.8228852107704612e-03,
+                7.7597712133169248e-04,
+                -1.0853672517607649e-03,
+                -2.5274457120166952e-04,
+                -1.7915735910959221e-04,
+                -1.3396116407110663e-03,
+                -6.0968976641437181e-04,
+                2.0118934373486649e-03,
+                2.3371958523421789e-03,
+                -9.8508848027534950e-04,
+                -3.3925644021281722e-03,
+                -1.0854725875245326e-03,
+                2.8783292855157874e-03,
+                2.8621174635235619e-03,
+                -1.0698848343386564e-03,
+                -3.3405936546295379e-03,
+                -9.8328026046482810e-04,
+                2.4229289326440791e-03,
+                2.2550618759676318e-03,
+                -7.9317890216197508e-04,
+                -2.3395683232093761e-03,
+                -6.5249381959878920e-04,
+                1.5270333531689838e-03,
+                1.3523627744666436e-03,
+                -4.5331977234490541e-04,
+                -1.2759280021851316e-03,
+                -3.3991519940643227e-04,
+                7.6039650412080867e-04,
+                6.4373996593722576e-04,
+                -2.0605444171726273e-04,
+                -5.5205076998167347e-04,
+                -1.3900336442518001e-04,
+                2.8974151743289524e-04,
+                2.2226831219301864e-04,
+                -6.0933979972042703e-05}; // RSM-EX4: B coefficients for the 128th order bandpass filter we designed
 float xarray_ADCB4[MICARRAYSIZE] = {0}; // MIC: create an x array
 float micReadingBuffer[30]; // Sliding window buffer for microphone readings
 float micReadingMax = 0;
 float micReadingMin = 0;
 float deltaMicReading = 0;
 float micReading = 0;
+float MicLPFThreshold = 12;
+float yk_ADCB4 = 0;
 int16_t state_scared = 0;
 //float accelzBalancePoint = 0.6;
 void setDACA(float dacouta0) {
@@ -757,7 +891,7 @@ void main(void)
     // MIC: enable TINT0 in the PIE: Group 1 interrupt 2 for ADCB1
     PieCtrlRegs.PIEIER1.bit.INTx2 = 1;
 
-//    init_serialSCIB(&SerialB,115200);
+    //    init_serialSCIB(&SerialB,115200);
     init_serialSCIC(&SerialC,115200);
     init_serialSCID(&SerialD,115200);
     setupSpib();
@@ -768,6 +902,9 @@ void main(void)
     ERTM;  // Enable Global realtime interrupt DBGM
     // IDLE loop. Just sit and loop forever (optional):
     // IDLE loop. Just sit and loop forever (optional):
+    setEPWM8B_RCServo(leftAngleState1);
+    setEPWM8A_RCServo(rightAngleState1);
+
     while(1)
     {
         if (UARTPrint == 1 ) {
@@ -809,11 +946,18 @@ __interrupt void SWI_isr(void) {
     WhlDiff = LeftWheel-RightWheel;//dtheta between wheels
     vel_WhlDiff = 0.3333 * vel_WhlDiff_1 + 166.6667 * (WhlDiff - WhlDiff_1);//dtheta dot between wheels
     if(state==1){
+
         //BALANCING CONTROL
         //AMBSCK calculate control law using rates
         //speed conrol law AMBSCK
-        setEPWM8B_RCServo(leftAngleState1);
-        setEPWM8A_RCServo(rightAngleState1);
+        if (coolDown == 0) {
+            setEPWM8B_RCServo(leftAngleState1);
+            setEPWM8A_RCServo(rightAngleState1);
+        }
+
+        if (numTimer1calls >= coolDownTime) {
+            coolDown = 0;
+        }
 
         eSpeed = (refSpeed - (vel_left+vel_right)/2.0);
 
@@ -879,11 +1023,16 @@ __interrupt void SWI_isr(void) {
         eSpeed_1 = eSpeed;
         intSpeed_1 = intSpeed;
     }
-    if(state==0){
+    else if(state==0){
+        setEPWM8B_RCServo(leftAngleState1);
+        setEPWM8A_RCServo(rightAngleState1);
+        deltaMicReading = 0;
+        micReadingMax = 0;
+        micReadingMin = 0;
         stopped = 0;
         //driving control code
         if(firstRun == 1){//SCK first time through the loop, save the current time
-            Vref = 2.0;//drive this fast at the start
+            Vref = 0.1;//drive this fast at the start
             startCycle = numTimer1calls;//SCK this is when we started driving, compare to current time to know when to stop.
             firstRun = 0;
         }
@@ -928,7 +1077,7 @@ __interrupt void SWI_isr(void) {
             velX_1 = velX;
             velY_1 = velY;
             //calculate turn control law
-            eturn = turn + leftVel - rightVel;
+            eturn = turn_0 + leftVel - rightVel;
             //calculate wall avoidance control law
             ewall = joyxk[0]-joyyk[0]; //if the wall is closer then the joy reading is higher. turn=L-R so left should increase turn and right should decrease it.
             //assume x is left, y is right... add this to left and subtract from right
@@ -962,7 +1111,8 @@ __interrupt void SWI_isr(void) {
         }
 
     }
-    if (state==2){
+    else if (state==2){
+        coolDown = 1;
         setEPWM8B_RCServo(leftAngleState2);
         setEPWM8A_RCServo(rightAngleState2);
         //        state = 1;
@@ -970,6 +1120,7 @@ __interrupt void SWI_isr(void) {
         micReadingMax = 0;
         micReadingMin = 0;
         hunch++;
+        coolDownTime = numTimer1calls + 2000;
         state = 1;
     }
 
@@ -1137,10 +1288,10 @@ __interrupt void SPIB_isr(void) {
 
     // MIC: use to control the segbot self-balancing point
     if (state_scared == 1) {
-//        accelzBalancePoint = AccelzFallOffPoint;
+        //        accelzBalancePoint = AccelzFallOffPoint;
     }
     else if (state_scared == 0) {
-//        accelzBalancePoint = 0.6;
+        //        accelzBalancePoint = 0.6;
     }
     //AMBSCK copy kalman filter code
     if(calibration_state == 0){
@@ -1595,26 +1746,30 @@ __interrupt void ADCB_ISR (void) {
 
     adcinb4_volt = adcb4result*3.0/4096.0; // Here covert ADCINB4 to volts
 
-    // MIC: sliding window filter
-    micReading = slidingWindowFilter(micReadingBuffer, sizeof(micReadingBuffer) / sizeof(micReadingBuffer[0]), adcinb4_volt);
 
+    // MIC: low pass filter  RSM-EX3.
+    xarray_ADCB4[0] = adcinb4_volt; // Update the newest input value
 
-    //    // MIC: low pass filter  RSM-EX3.
-    //    xarray_ADCB4[0] = adcinb4_volt; // Update the newest input value
-    //
-    //    yk_ADCB4 = 0.0; // Calculate the filter output yk
-    //    for (int k = 0; k < ARRAYSIZE; k++) {
-    //        yk_ADCB4 += b[k] * xarray_ADCB4[k];
-    //    }
-    //
-    //    for (int k = ARRAYSIZE-1; k > 0; k--) {
-    //        xarray_ADCB4[k] = xarray_ADCB4[k-1];
-    //    }
+    yk_ADCB4 = 0.0; // Calculate the filter output yk
+    for (int k = 0; k < ARRAYSIZE; k++) {
+        yk_ADCB4 += b[k] * xarray_ADCB4[k];
+    }
+
+    for (int k = ARRAYSIZE-1; k > 0; k--) {
+        xarray_ADCB4[k] = xarray_ADCB4[k-1];
+    }
     //    //    setDACA(adcinb4_volt); // Here write yk to DACB channel
     //    setDACA(yk_ADCB4 + 1.5);
     setDACA(adcinb4_volt);
 
-    if (deltaMicReading > THRESHOLD) {
+    // MIC: sliding window filter
+    //    micReading = slidingWindowFilter(micReadingBuffer, sizeof(micReadingBuffer) / sizeof(micReadingBuffer[0]), adcinb4_volt);
+//    micReading = slidingWindowFilter(micReadingBuffer, sizeof(micReadingBuffer) / sizeof(micReadingBuffer[0]), yk_ADCB4);
+    micReading = slidingWindowFilter(micReadingBuffer, 30, yk_ADCB4);
+
+    // change "deltaMicReading" to "yk_ADCB4"
+    // "THRESHOLD" to "MicLPFThreshold"
+    if (micReading > MicLPFThreshold) {
         state_scared = 1;
         state = 0;
         //        setEPWM2A(0);  // MIC: immediately stop the robot
