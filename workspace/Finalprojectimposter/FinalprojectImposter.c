@@ -46,8 +46,8 @@ void setEPWM8A_RCServo(float); // Left lever
 void setEPWM8B_RCServo(float); // Right Lever
 float rightAngleState1 = 97;
 float leftAngleState1 = -99;
-float leftAngleState2 = 20;
-float rightAngleState2 = -35;
+float leftAngleState2 = 15;
+float rightAngleState2 = -20;
 
 uint32_t hunch = 0;
 
@@ -205,7 +205,7 @@ float xk_4 = 0;
 float yk = 0;
 //b is the filter coefficients
 //float b[5] = {0.2,0.2,0.2,0.2,0.2}; // 0.2 is 1/5th therefore a 5 point average
-#define ARRAYSIZE 129
+#define ARRAYSIZE 79
 float xk[ARRAYSIZE]={0};
 float joyxk[ARRAYSIZE]={0};
 float joyyk[ARRAYSIZE]={0};
@@ -255,7 +255,7 @@ float K3 = -1.1;
 float K4 = -0.1;
 
 // MIC
-#define MICARRAYSIZE 32  // define the order of the filter (ARRAYSIZE = order + 1)
+#define MICARRAYSIZE 79  // define the order of the filter (ARRAYSIZE = order + 1)
 #define THRESHOLD 2.4    // Adjust this threshold value based on your requirements for sliding window filter
 #define AccelzFallOffPoint 1.7  // the accelz reading to control what pose the robot falls off
 __interrupt void ADCB_ISR(void); // RSM: setup interrupt to sample the mic's audio signal.
@@ -294,142 +294,92 @@ float adcinb4_volt = 0; // EX4: define var for scaled ADCINB4 volts
 //                -2.5619416124584822e-03,
 //                -1.8185681242784432e-03,
 //                -6.3046914864397922e-04};   // MIC: B coefficients for the LPF for the 31st order with 500Hz cutoff frequency. comment out b[22] around line 237
-float b[129] = {-6.0933979972042703e-05,
-                2.2226831219301864e-04,
-                2.8974151743289524e-04,
-                -1.3900336442518001e-04,
-                -5.5205076998167347e-04,
-                -2.0605444171726273e-04,
-                6.4373996593722576e-04,
-                7.6039650412080867e-04,
-                -3.3991519940643227e-04,
-                -1.2759280021851316e-03,
-                -4.5331977234490541e-04,
-                1.3523627744666436e-03,
-                1.5270333531689838e-03,
-                -6.5249381959878920e-04,
-                -2.3395683232093761e-03,
-                -7.9317890216197508e-04,
-                2.2550618759676318e-03,
-                2.4229289326440791e-03,
-                -9.8328026046482810e-04,
-                -3.3405936546295379e-03,
-                -1.0698848343386564e-03,
-                2.8621174635235619e-03,
-                2.8783292855157874e-03,
-                -1.0854725875245326e-03,
-                -3.3925644021281722e-03,
-                -9.8508848027534950e-04,
-                2.3371958523421789e-03,
-                2.0118934373486649e-03,
-                -6.0968976641437181e-04,
-                -1.3396116407110663e-03,
-                -1.7915735910959221e-04,
-                -2.5274457120166952e-04,
-                -1.0853672517607649e-03,
-                7.7597712133169248e-04,
-                3.8228852107704612e-03,
-                1.6307564513192770e-03,
-                -5.5602720280016954e-03,
-                -6.9630356826812156e-03,
-                3.2367117297483761e-03,
-                1.2468656973230671e-02,
-                4.5060307109954512e-03,
-                -1.3594486452954113e-02,
-                -1.5470545953991000e-02,
-                6.6517057691880986e-03,
-                2.3997144771943577e-02,
-                8.1957094815928323e-03,
-                -2.3528048209876834e-02,
-                -2.5613486996940341e-02,
-                1.0579491680098030e-02,
-                3.6790315776064585e-02,
-                1.2145265253265586e-02,
-                -3.3779165367020428e-02,
-                -3.5694894642747728e-02,
-                1.4334305976936610e-02,
-                4.8530261188027703e-02,
-                1.5615555399187055e-02,
-                -4.2374092982100861e-02,
-                -4.3724547445498724e-02,
-                1.7158368219669051e-02,
-                5.6801150550068319e-02,
-                1.7880123153923431e-02,
-                -4.7486277179965466e-02,
-                -4.7973337468012973e-02,
-                1.8436509093443163e-02,
-                5.9783339421635107e-02,
-                1.8436509093443163e-02,
-                -4.7973337468012973e-02,
-                -4.7486277179965466e-02,
-                1.7880123153923431e-02,
-                5.6801150550068319e-02,
-                1.7158368219669051e-02,
-                -4.3724547445498724e-02,
-                -4.2374092982100861e-02,
-                1.5615555399187055e-02,
-                4.8530261188027703e-02,
-                1.4334305976936610e-02,
-                -3.5694894642747728e-02,
-                -3.3779165367020428e-02,
-                1.2145265253265586e-02,
-                3.6790315776064585e-02,
-                1.0579491680098030e-02,
-                -2.5613486996940341e-02,
-                -2.3528048209876834e-02,
-                8.1957094815928323e-03,
-                2.3997144771943577e-02,
-                6.6517057691880986e-03,
-                -1.5470545953991000e-02,
-                -1.3594486452954113e-02,
-                4.5060307109954512e-03,
-                1.2468656973230671e-02,
-                3.2367117297483761e-03,
-                -6.9630356826812156e-03,
-                -5.5602720280016954e-03,
-                1.6307564513192770e-03,
-                3.8228852107704612e-03,
-                7.7597712133169248e-04,
-                -1.0853672517607649e-03,
-                -2.5274457120166952e-04,
-                -1.7915735910959221e-04,
-                -1.3396116407110663e-03,
-                -6.0968976641437181e-04,
-                2.0118934373486649e-03,
-                2.3371958523421789e-03,
-                -9.8508848027534950e-04,
-                -3.3925644021281722e-03,
-                -1.0854725875245326e-03,
-                2.8783292855157874e-03,
-                2.8621174635235619e-03,
-                -1.0698848343386564e-03,
-                -3.3405936546295379e-03,
-                -9.8328026046482810e-04,
-                2.4229289326440791e-03,
-                2.2550618759676318e-03,
-                -7.9317890216197508e-04,
-                -2.3395683232093761e-03,
-                -6.5249381959878920e-04,
-                1.5270333531689838e-03,
-                1.3523627744666436e-03,
-                -4.5331977234490541e-04,
-                -1.2759280021851316e-03,
-                -3.3991519940643227e-04,
-                7.6039650412080867e-04,
-                6.4373996593722576e-04,
-                -2.0605444171726273e-04,
-                -5.5205076998167347e-04,
-                -1.3900336442518001e-04,
-                2.8974151743289524e-04,
-                2.2226831219301864e-04,
-                -6.0933979972042703e-05}; // RSM-EX4: B coefficients for the 128th order bandpass filter we designed
+float b[79]={   2.4557099976303186e-03,
+                9.6905814609742210e-04,
+                -1.0362089123543512e-03,
+                -2.9858809575470263e-03,
+                -4.1508683472763035e-03,
+                -3.8306485863546492e-03,
+                -1.6820536185527194e-03,
+                1.9390583094579640e-03,
+                5.8476102737113561e-03,
+                8.2995302517921577e-03,
+                7.6736970666368915e-03,
+                3.3311505642549051e-03,
+                -3.7629232405354093e-03,
+                -1.1058960079007989e-02,
+                -1.5249200330573325e-02,
+                -1.3677739041744460e-02,
+                -5.7575612589032257e-03,
+                6.3083256681028621e-03,
+                1.7994253391747053e-02,
+                2.4103708463083857e-02,
+                2.1023488946299164e-02,
+                8.6146327378250325e-03,
+                -9.1975302038778458e-03,
+                -2.5590904755921549e-02,
+                -3.3469046275437363e-02,
+                -2.8527130889998503e-02,
+                -1.1432506554716802e-02,
+                1.1946915984194494e-02,
+                3.2557421142013127e-02,
+                4.1731079582744322e-02,
+                3.4879634062432878e-02,
+                1.3714285742630979e-02,
+                -1.4067012762582006e-02,
+                -3.7642993674649863e-02,
+                -4.7395172605045832e-02,
+                -3.8924097709712786e-02,
+                -1.5041955589246264e-02,
+                1.5167399671650683e-02,
+                3.9906831227999547e-02,
+                4.9409372066260178e-02,
+                3.9906831227999547e-02,
+                1.5167399671650683e-02,
+                -1.5041955589246264e-02,
+                -3.8924097709712786e-02,
+                -4.7395172605045832e-02,
+                -3.7642993674649863e-02,
+                -1.4067012762582006e-02,
+                1.3714285742630979e-02,
+                3.4879634062432878e-02,
+                4.1731079582744322e-02,
+                3.2557421142013127e-02,
+                1.1946915984194494e-02,
+                -1.1432506554716802e-02,
+                -2.8527130889998503e-02,
+                -3.3469046275437363e-02,
+                -2.5590904755921549e-02,
+                -9.1975302038778458e-03,
+                8.6146327378250325e-03,
+                2.1023488946299164e-02,
+                2.4103708463083857e-02,
+                1.7994253391747053e-02,
+                6.3083256681028621e-03,
+                -5.7575612589032257e-03,
+                -1.3677739041744460e-02,
+                -1.5249200330573325e-02,
+                -1.1058960079007989e-02,
+                -3.7629232405354093e-03,
+                3.3311505642549051e-03,
+                7.6736970666368915e-03,
+                8.2995302517921577e-03,
+                5.8476102737113561e-03,
+                1.9390583094579640e-03,
+                -1.6820536185527194e-03,
+                -3.8306485863546492e-03,
+                -4.1508683472763035e-03,
+                -2.9858809575470263e-03,
+                -1.0362089123543512e-03,
+                9.6905814609742210e-04,
+                2.4557099976303186e-03}; // RSM-EX4: B coefficients for the 128th order bandpass filter we designed
 float xarray_ADCB4[MICARRAYSIZE] = {0}; // MIC: create an x array
 float micReadingBuffer[30]; // Sliding window buffer for microphone readings
 float micReadingMax = 0;
 float micReadingMin = 0;
 float deltaMicReading = 0;
 float micReading = 0;
-float MicLPFThreshold = 12;
+float MicLPFThreshold = .5;
 float yk_ADCB4 = 0;
 int16_t state_scared = 0;
 //float accelzBalancePoint = 0.6;
@@ -452,7 +402,7 @@ void setDACB(float dacouta1) {
 uint16_t state = 1;//0 is driving, 1 is balancing, 2 is getting back up
 
 void main(void)
-{
+ {
     // PLL, WatchDog, enable Peripheral Clocks
     // This example function is found in the F2837xD_SysCtrl.c file.
     InitSysCtrl();
@@ -757,7 +707,7 @@ void main(void)
     //ADCB
     AdcbRegs.ADCSOC0CTL.bit.CHSEL = 0x4; //SOC0 will convert Channel you choose Does not have tobe B0
     AdcbRegs.ADCSOC0CTL.bit.ACQPS = 99; //sample window is acqps + 1 SYSCLK cycles = 500ns
-    AdcbRegs.ADCSOC0CTL.bit.TRIGSEL = 0xD; // EPWM5 ADCSOCA or another trigger you choose will/trigger SOC0
+    AdcbRegs.ADCSOC0CTL.bit.TRIGSEL = 0x11; // EPWM5 ADCSOCA or another trigger you choose will/trigger SOC0
     //AdcbRegs.ADCSOC1CTL.bit.CHSEL = ???; //SOC1 will convert Channel you choose Does not have to
     //be B1
     //AdcbRegs.ADCSOC1CTL.bit.ACQPS = 99; //sample window is acqps + 1 SYSCLK cycles = 500ns
@@ -820,6 +770,20 @@ void main(void)
     // Notice here that we are not setting CMPA or CMPB because we are not using the PWM signal
     EPwm5Regs.ETSEL.bit.SOCAEN = 1; //enable SOCA
     EPwm5Regs.TBCTL.bit.CTRMODE = 0; //unfreeze, and enter up count mode
+
+    EPwm7Regs.ETSEL.bit.SOCAEN = 0; // Disable SOC on A group
+    EPwm7Regs.TBCTL.bit.CTRMODE = 3; // freeze counter
+    EPwm7Regs.ETSEL.bit.SOCASEL = 2; // Select Event when counter equal to PRD
+    EPwm7Regs.ETPS.bit.SOCAPRD = 1; // Generate pulse on 1st event (“pulse” is the same as  “trigger”)
+    EPwm7Regs.TBCTR = 0x0; // Clear counter
+    EPwm7Regs.TBPHS.bit.TBPHS = 0x0000; // Phase is 0
+    EPwm7Regs.TBCTL.bit.PHSEN = 0; // Disable phase loading
+    EPwm7Regs.TBCTL.bit.CLKDIV = 0; // divide by 1 50Mhz Clock
+    EPwm7Regs.TBPRD = 5000; // Set Period to 1/4/2.5ms sample. Input clock is 50MHz.
+    // Notice here that we are not setting CMPA or CMPB because we are not using the PWM signal
+    EPwm7Regs.ETSEL.bit.SOCAEN = 1; //enable SOCA
+    EPwm7Regs.TBCTL.bit.CTRMODE = 0; //unfreeze, and enter up count mode
+
     EDIS;
     //--------------------------------------------------------------------
     //AMBSCK set up registers to use SCI
@@ -1032,7 +996,7 @@ __interrupt void SWI_isr(void) {
         stopped = 0;
         //driving control code
         if(firstRun == 1){//SCK first time through the loop, save the current time
-            Vref = 0.1;//drive this fast at the start
+            Vref = 0.8;//drive this fast at the start
             startCycle = numTimer1calls;//SCK this is when we started driving, compare to current time to know when to stop.
             firstRun = 0;
         }
@@ -1109,7 +1073,7 @@ __interrupt void SWI_isr(void) {
 
 
         }
-
+        coolDownTime = numTimer1calls + 2000;
     }
     else if (state==2){
         coolDown = 1;
@@ -1119,9 +1083,9 @@ __interrupt void SWI_isr(void) {
         deltaMicReading = 0;
         micReadingMax = 0;
         micReadingMin = 0;
-        hunch++;
-        coolDownTime = numTimer1calls + 2000;
-        state = 1;
+        if(numTimer1calls >= coolDownTime - 1000){
+            state = 1;
+        }
     }
 
 
@@ -1293,7 +1257,6 @@ __interrupt void SPIB_isr(void) {
     else if (state_scared == 0) {
         //        accelzBalancePoint = 0.6;
     }
-    //AMBSCK copy kalman filter code
     if(calibration_state == 0){
         calibration_count++;
         if (calibration_count == 2000) {
@@ -1759,8 +1722,8 @@ __interrupt void ADCB_ISR (void) {
         xarray_ADCB4[k] = xarray_ADCB4[k-1];
     }
     //    //    setDACA(adcinb4_volt); // Here write yk to DACB channel
-    //    setDACA(yk_ADCB4 + 1.5);
-    setDACA(adcinb4_volt);
+        setDACA(yk_ADCB4 + 1.5);
+//    setDACA(adcinb4_volt);
 
     // MIC: sliding window filter
     //    micReading = slidingWindowFilter(micReadingBuffer, sizeof(micReadingBuffer) / sizeof(micReadingBuffer[0]), adcinb4_volt);
@@ -1769,7 +1732,7 @@ __interrupt void ADCB_ISR (void) {
 
     // change "deltaMicReading" to "yk_ADCB4"
     // "THRESHOLD" to "MicLPFThreshold"
-    if (micReading > MicLPFThreshold) {
+    if (yk_ADCB4 > MicLPFThreshold) {
         state_scared = 1;
         state = 0;
         //        setEPWM2A(0);  // MIC: immediately stop the robot
