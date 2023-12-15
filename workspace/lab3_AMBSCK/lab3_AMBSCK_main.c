@@ -55,24 +55,24 @@ float angle8B=0.0;
 
 void setEPWM2A(float controleffort){
     //take value from -10 to 10 and map to value from 0 TBPRD=2500
-    if(controleffort>10){
-        controleffort=10;
-    }
-    if(controleffort<-10){
-        controleffort=-10;
-    }
-    controleffort=controleffort+10;//map 0 to 20 to 0 to 2500
+//    if(controleffort>10){
+//        controleffort=10;
+//    }
+//    if(controleffort<-10){
+//        controleffort=-10;
+//    }
+//    controleffort=controleffort+10;//map 0 to 20 to 0 to 2500
     EPwm2Regs.CMPA.bit.CMPA=(controleffort/20)*2500;
 }
 void setEPWM2B(float controleffort){
     //take value from -10 to 10 and map to value from 0 TBPRD=2500
-    if(controleffort>10){
-        controleffort=10;
-    }
-    if(controleffort<-10){
-        controleffort=-10;
-    }
-    controleffort=controleffort+10;//map 0 to 20 to 0 to 2500
+//    if(controleffort>10){
+//        controleffort=10;
+//    }
+//    if(controleffort<-10){
+//        controleffort=-10;
+//    }
+//    controleffort=controleffort+10;//map 0 to 20 to 0 to 2500
     EPwm2Regs.CMPB.bit.CMPB=(controleffort/20)*2500;
 }
 void setEPWM8A_RCServo(float angle){
